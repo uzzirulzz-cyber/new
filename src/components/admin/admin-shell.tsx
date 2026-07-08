@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Users, ArrowLeftRight, CandlestickChart,
   Bell, Shield, Menu, X, LogOut, ChevronDown,
+  AlertTriangle, Trash2, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
@@ -257,26 +258,123 @@ function AdminNotifications() {
 }
 
 function AdminSecurity() {
-  const [logs, setLogs] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
+  const [resetting, setResetting] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetResult, setResetResult] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  useEffect(() => {
-    // For now, show admin login sessions
-    fetch("/api/admin/stats").then(r => r.json()).then(() => {
-      // Would have a separate audit log endpoint
-      setLogs([]);
-      setLoading(false);
-    });
-  }, []);
+  const handleReset = async () => {
+    setResetting(true);
+    setResetResult(null);
+    try {
+      const res = await fetch("/api/admin/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: "RESET_ALL_DATA" }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setResetResult({ type: "success", text: data.message || "Platform reset successfully" });
+        setShowResetConfirm(false);
+        // Reload after 2 seconds to reflect fresh state
+        setTimeout(() => window.location.reload(), 2000);
+      } else {
+        setResetResult({ type: "error", text: data.error || "Reset failed" });
+      }
+    } catch (e: any) {
+      setResetResult({ type: "error", text: e.message });
+    }
+    setResetting(false);
+  };
+
+  const isSuperAdmin = user?.role === "SUPER_ADMIN";
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <h2 className="text-2xl font-bold mb-4">Security & Audit Logs</h2>
+    <div className="max-w-4xl mx-auto space-y-4">
+      <h2 className="text-2xl font-bold">Security & Audit</h2>
+
+      {/* Reset Platform — Super Admin only */}
+      {isSuperAdmin && (
+        <div className="card-gradient rounded-xl p-6 border border-red-500/30">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-500/15 shrink-0">
+              <AlertTriangle className="h-6 w-6 text-red-400" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-bold text-red-400">Danger Zone — Reset Platform</h3>
+              <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                This will permanently delete <strong className="text-foreground">ALL</strong> data — every user, trade,
+                transaction, wallet, notification, and audit log. Only the default accounts (1 Super Admin + 5 Sub-Agents)
+                will remain. This action cannot be undone.
+              </p>
+
+              {resetResult && (
+                <div className={`mt-3 rounded-lg px-3 py-2 text-sm ${
+                  resetResult.type === "success"
+                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                    : "bg-red-500/10 text-red-400 border border-red-500/20"
+                }`}>
+                  {resetResult.text}
+                </div>
+              )}
+
+              {!showResetConfirm ? (
+                <Button
+                  variant="outline"
+                  className="mt-4 border-red-500/40 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                  onClick={() => setShowResetConfirm(true)}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" /> Reset Platform to Zero
+                </Button>
+              ) : (
+                <div className="mt-4 p-4 rounded-lg bg-red-500/5 border border-red-500/20">
+                  <p className="text-sm font-medium text-red-400 mb-3">
+                    ⚠️ Are you absolutely sure? Type "RESET" to confirm.
+                  </p>
+                  <ConfirmInput onConfirm={handleReset} onCancel={() => setShowResetConfirm(false)} loading={resetting} />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Audit log info */}
       <div className="card-gradient rounded-xl p-6">
-        <p className="text-sm text-muted-foreground text-center py-8">
-          Audit logs will appear here. All admin actions are tracked in the database.
+        <h3 className="font-bold mb-2 flex items-center gap-2">
+          <Shield className="h-4 w-4 text-amber-500" /> Audit Logs
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          All admin actions (login, fund adjustments, user approvals, deposits/withdrawals) are tracked in the AuditLog
+          table with timestamp, IP address, and action details.
         </p>
       </div>
+    </div>
+  );
+}
+
+function ConfirmInput({ onConfirm, onCancel, loading }: { onConfirm: () => void; onCancel: () => void; loading: boolean }) {
+  const [text, setText] = useState("");
+  return (
+    <div className="flex gap-2">
+      <input
+        type="text"
+        placeholder='Type "RESET" to confirm'
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        className="flex-1 h-10 px-3 rounded-lg bg-sidebar-accent/60 border border-sidebar-border text-sm"
+        autoFocus
+      />
+      <Button
+        className="bg-red-500 hover:bg-red-600 text-white"
+        disabled={text !== "RESET" || loading}
+        onClick={onConfirm}
+      >
+        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Reset Now"}
+      </Button>
+      <Button variant="outline" onClick={onCancel} disabled={loading}>
+        Cancel
+      </Button>
     </div>
   );
 }
