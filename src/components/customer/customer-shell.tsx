@@ -5,13 +5,16 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Home, LayoutDashboard, CandlestickChart, Wallet, BarChart3, User,
   ArrowDownLeft, ArrowUpRight, ArrowLeftRight, History, Bell,
-  Menu, X, LogOut, Search, ChevronDown,
+  Menu, X, LogOut, Search, ChevronDown, Star, Settings,
+  Coins, PieChart, Snowflake, TrendingUp, TrendingDown,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useHashRoute } from "@/hooks/use-hash-route";
 import { Brand } from "@/components/brand";
 import { TickerTape } from "@/components/ticker-tape";
+import { marketPairs } from "@/lib/dashboard-data";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -28,14 +31,18 @@ import { CustomerProfile } from "./customer-profile";
 import { CustomerTransactions } from "./customer-transactions";
 
 export type CustomerSection =
-  | "home" | "dashboard" | "trade" | "wallet" | "analytics"
-  | "recharge" | "withdraw" | "transfer" | "history" | "profile" | "notifications";
+  | "home" | "dashboard" | "markets" | "watchlist" | "trade" | "analytics" | "assets"
+  | "wallet" | "recharge" | "withdraw" | "transfer" | "history"
+  | "profile" | "notifications" | "settings";
 
 const NAV: { key: CustomerSection; label: string; icon: any; group: string }[] = [
   { key: "home", label: "Home", icon: Home, group: "Main" },
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard, group: "Main" },
+  { key: "markets", label: "Markets", icon: Coins, group: "Main" },
+  { key: "watchlist", label: "Watchlist", icon: Star, group: "Main" },
   { key: "trade", label: "Trade", icon: CandlestickChart, group: "Main" },
   { key: "analytics", label: "Analytics", icon: BarChart3, group: "Main" },
+  { key: "assets", label: "Assets", icon: PieChart, group: "Main" },
   { key: "wallet", label: "Wallet", icon: Wallet, group: "Funds" },
   { key: "recharge", label: "Recharge", icon: ArrowDownLeft, group: "Funds" },
   { key: "withdraw", label: "Withdraw", icon: ArrowUpRight, group: "Funds" },
@@ -43,6 +50,7 @@ const NAV: { key: CustomerSection; label: string; icon: any; group: string }[] =
   { key: "history", label: "History", icon: History, group: "Funds" },
   { key: "profile", label: "Profile", icon: User, group: "Account" },
   { key: "notifications", label: "Notifications", icon: Bell, group: "Account" },
+  { key: "settings", label: "Settings", icon: Settings, group: "Account" },
 ];
 
 export function CustomerShell() {
@@ -232,15 +240,19 @@ export function CustomerShell() {
               {(section === "home" || section === "dashboard") && (
                 <CustomerDashboard onNavigate={navigate} onTradeCoin={navigateToTrade} />
               )}
+              {section === "markets" && <CustomerMarkets onTradeCoin={navigateToTrade} />}
+              {section === "watchlist" && <CustomerWatchlist onTradeCoin={navigateToTrade} />}
               {section === "trade" && <CustomerTrade onSettled={refresh} initialCoin={selectedCoin} />}
-              {section === "wallet" && <CustomerWallet />}
               {section === "analytics" && <CustomerAnalytics />}
+              {section === "assets" && <CustomerAssets onNavigate={navigate} />}
+              {section === "wallet" && <CustomerWallet />}
               {section === "recharge" && <CustomerWallet mode="recharge" />}
               {section === "withdraw" && <CustomerWallet mode="withdraw" />}
               {section === "transfer" && <CustomerWallet mode="transfer" />}
               {section === "history" && <CustomerTransactions />}
               {section === "profile" && <CustomerProfile />}
               {section === "notifications" && <CustomerNotifications />}
+              {section === "settings" && <CustomerSettings />}
             </motion.div>
           </AnimatePresence>
         </main>
@@ -320,6 +332,357 @@ function CustomerNotifications() {
           ))
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Markets — full searchable grid of all cryptocurrencies ───
+function CustomerMarkets({ onTradeCoin }: { onTradeCoin: (coin: string) => void }) {
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<"volume" | "change" | "price" | "name">("volume");
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+
+  const filtered = marketPairs
+    .filter((m) => !search || m.pair.toLowerCase().includes(search.toLowerCase()) || m.base.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      if (sortBy === "name") return a.base.localeCompare(b.base);
+      if (sortBy === "price") return b.lastPrice - a.lastPrice;
+      if (sortBy === "change") return b.change24h - a.change24h;
+      return b.volume24h - a.volume24h;
+    });
+
+  const toggleFav = (coin: string) => {
+    setFavorites((prev) => {
+      const next = new Set(prev);
+      if (next.has(coin)) next.delete(coin);
+      else next.add(coin);
+      return next;
+    });
+  };
+
+  return (
+    <div className="max-w-6xl mx-auto space-y-4">
+      <div>
+        <h2 className="text-2xl font-bold">Markets</h2>
+        <p className="text-sm text-muted-foreground">All {marketPairs.length} supported cryptocurrencies · click any coin to trade</p>
+      </div>
+
+      <Card className="card-gradient p-4">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search coin (e.g. BTC, ETH, SOL)..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10 h-9 bg-sidebar-accent/60"
+            />
+          </div>
+          <div className="flex items-center gap-1.5 rounded-lg bg-sidebar-accent/40 p-1">
+            {(["volume", "change", "price", "name"] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setSortBy(s)}
+                className={`px-3 py-1 text-xs rounded-md capitalize transition-colors ${
+                  sortBy === s ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {s === "volume" ? "Volume" : s === "change" ? "24h %" : s === "price" ? "Price" : "Name"}
+              </button>
+            ))}
+          </div>
+        </div>
+      </Card>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {filtered.map((coin) => (
+          <div
+            key={coin.base}
+            className="card-gradient rounded-xl p-4 cursor-pointer transition-all hover:border-amber-500/40 hover:scale-[1.02]"
+            onClick={() => onTradeCoin(coin.base)}
+          >
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex items-center gap-2.5">
+                <span
+                  className="h-10 w-10 flex items-center justify-center rounded-full text-base font-bold shrink-0"
+                  style={{ background: `${coin.iconColor}25`, color: coin.iconColor }}
+                >
+                  {coin.icon}
+                </span>
+                <div>
+                  <p className="text-sm font-bold">{coin.base}</p>
+                  <p className="text-[10px] text-muted-foreground">{coin.pair}</p>
+                </div>
+              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleFav(coin.base); }}
+                className="text-muted-foreground/40 hover:text-amber-400"
+              >
+                <Star className={`h-4 w-4 ${favorites.has(coin.base) ? "fill-amber-400 text-amber-400" : ""}`} />
+              </button>
+            </div>
+            <div className="flex items-end justify-between">
+              <div>
+                <p className="text-lg font-mono font-bold">{fmtUsd(coin.lastPrice)}</p>
+                <p className={`text-xs font-medium ${coin.change24h >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                  {coin.change24h >= 0 ? "▲" : "▼"} {Math.abs(coin.change24h).toFixed(2)}%
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] text-muted-foreground">24h Vol</p>
+                <p className="text-xs font-mono">{(coin.volume24h / 1000).toFixed(1)}K</p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              className={`w-full mt-3 h-8 text-xs ${
+                coin.change24h >= 0 ? "bg-emerald-500 hover:bg-emerald-600 text-white" : "bg-red-500 hover:bg-red-600 text-white"
+              }`}
+            >
+              Trade {coin.base}
+            </Button>
+          </div>
+        ))}
+      </div>
+      {filtered.length === 0 && (
+        <p className="text-center py-8 text-sm text-muted-foreground">No coins match your search.</p>
+      )}
+    </div>
+  );
+}
+
+// ─── Watchlist — favorited coins ──────────────────────────────
+function CustomerWatchlist({ onTradeCoin }: { onTradeCoin: (coin: string) => void }) {
+  const [favorites, setFavorites] = useState<Set<string>>(new Set(["BTC", "ETH"]));
+
+  const watchlistCoins = marketPairs.filter((m) => favorites.has(m.base));
+
+  const removeFav = (coin: string) => {
+    setFavorites((prev) => {
+      const next = new Set(prev);
+      next.delete(coin);
+      return next;
+    });
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-4">
+      <div>
+        <h2 className="text-2xl font-bold">Watchlist</h2>
+        <p className="text-sm text-muted-foreground">Your favorited cryptocurrencies · click to trade</p>
+      </div>
+
+      {watchlistCoins.length === 0 ? (
+        <Card className="card-gradient p-12 text-center">
+          <Star className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+          <h3 className="text-lg font-bold mb-2">No Favorites Yet</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            Go to Markets and tap the star icon on any coin to add it to your watchlist.
+          </p>
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {watchlistCoins.map((coin) => (
+            <div
+              key={coin.base}
+              className="card-gradient rounded-xl p-4 flex items-center gap-4 cursor-pointer hover:border-amber-500/40 transition-all"
+              onClick={() => onTradeCoin(coin.base)}
+            >
+              <span
+                className="h-10 w-10 flex items-center justify-center rounded-full text-base font-bold shrink-0"
+                style={{ background: `${coin.iconColor}25`, color: coin.iconColor }}
+              >
+                {coin.icon}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold">{coin.base}</p>
+                <p className="text-[10px] text-muted-foreground">{coin.pair}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-mono font-bold">{fmtUsd(coin.lastPrice)}</p>
+                <p className={`text-xs ${coin.change24h >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                  {coin.change24h >= 0 ? "+" : ""}{coin.change24h.toFixed(2)}%
+                </p>
+              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); removeFav(coin.base); }}
+                className="text-amber-400 hover:text-amber-300 p-1"
+              >
+                <Star className="h-4 w-4 fill-amber-400" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Assets — portfolio overview ──────────────────────────────
+function CustomerAssets({ onNavigate }: { onNavigate: (s: CustomerSection) => void }) {
+  const { wallet } = useAuth();
+  const [trades, setTrades] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/trades?limit=100").then(r => r.json()).then(d => {
+      setTrades(d.trades || []);
+      setLoading(false);
+    });
+  }, []);
+
+  const settledTrades = trades.filter(t => t.status === "SETTLED");
+  const wins = settledTrades.filter(t => t.result === "WIN");
+  const losses = settledTrades.filter(t => t.result === "LOSS");
+
+  const cards = [
+    { label: "Total Assets", value: wallet?.totalAssets || 0, color: "text-blue-400", icon: Wallet },
+    { label: "Available Balance", value: wallet?.available || 0, color: "text-emerald-400", icon: ArrowDownLeft },
+    { label: "Frozen Balance", value: wallet?.frozen || 0, color: "text-amber-400", icon: Snowflake },
+    { label: "Total Profit", value: wallet?.totalProfit || 0, color: (wallet?.totalProfit || 0) >= 0 ? "text-emerald-400" : "text-red-400", icon: TrendingUp },
+    { label: "Today's Profit", value: wallet?.todayProfit || 0, color: (wallet?.todayProfit || 0) >= 0 ? "text-emerald-400" : "text-red-400", icon: TrendingDown },
+    { label: "Winning Trades", value: wins.length, color: "text-emerald-400", icon: BarChart3, isCount: true },
+    { label: "Losing Trades", value: losses.length, color: "text-red-400", icon: BarChart3, isCount: true },
+    { label: "Total Trades", value: settledTrades.length, color: "text-blue-400", icon: BarChart3, isCount: true },
+  ];
+
+  return (
+    <div className="max-w-5xl mx-auto space-y-4">
+      <div>
+        <h2 className="text-2xl font-bold">Assets</h2>
+        <p className="text-sm text-muted-foreground">Complete portfolio overview · synchronized with backend</p>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {cards.map((c, i) => (
+          <motion.div key={c.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}>
+            <Card className="card-gradient p-4">
+              <div className="flex items-start justify-between">
+                <div className="min-w-0">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground truncate">{c.label}</p>
+                  <p className={`mt-1 text-lg font-bold ${c.color}`}>
+                    {c.isCount ? c.value : fmtUsd(c.value)}
+                  </p>
+                </div>
+                <c.icon className={`h-5 w-5 ${c.color} shrink-0`} />
+              </div>
+            </Card>
+          </motion.div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Button variant="outline" className="h-12" onClick={() => onNavigate("recharge")}>
+          <ArrowDownLeft className="mr-2 h-4 w-4" /> Deposit
+        </Button>
+        <Button variant="outline" className="h-12" onClick={() => onNavigate("withdraw")}>
+          <ArrowUpRight className="mr-2 h-4 w-4" /> Withdraw
+        </Button>
+        <Button variant="outline" className="h-12" onClick={() => onNavigate("transfer")}>
+          <ArrowLeftRight className="mr-2 h-4 w-4" /> Transfer
+        </Button>
+        <Button variant="outline" className="h-12" onClick={() => onNavigate("history")}>
+          <History className="mr-2 h-4 w-4" /> History
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Settings — user preferences & security ───────────────────
+function CustomerSettings() {
+  const { user, changePassword } = useAuth();
+  const [oldPwd, setOldPwd] = useState("");
+  const [newPwd, setNewPwd] = useState("");
+  const [confirmPwd, setConfirmPwd] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPwd !== confirmPwd) {
+      setMsg({ type: "error", text: "New passwords do not match" });
+      return;
+    }
+    if (newPwd.length < 6) {
+      setMsg({ type: "error", text: "Password must be at least 6 characters" });
+      return;
+    }
+    setLoading(true);
+    const result = await changePassword({ currentPassword: oldPwd, newPassword: newPwd, confirmPassword: confirmPwd });
+    if (result.success) {
+      setMsg({ type: "success", text: "Password changed successfully" });
+      setOldPwd(""); setNewPwd(""); setConfirmPwd("");
+    } else {
+      setMsg({ type: "error", text: result.error || "Failed to change password" });
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-4">
+      <div>
+        <h2 className="text-2xl font-bold">Settings</h2>
+        <p className="text-sm text-muted-foreground">Manage your account security and preferences</p>
+      </div>
+
+      <Card className="card-gradient p-6">
+        <h3 className="font-bold mb-4 flex items-center gap-2">
+          <Settings className="h-4 w-4 text-amber-500" /> Change Password
+        </h3>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label className="text-xs text-muted-foreground">Current Password</label>
+            <Input
+              type="password"
+              value={oldPwd}
+              onChange={(e) => setOldPwd(e.target.value)}
+              className="mt-1 h-10 bg-sidebar-accent/60"
+              required
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground">New Password</label>
+            <Input
+              type="password"
+              value={newPwd}
+              onChange={(e) => setNewPwd(e.target.value)}
+              className="mt-1 h-10 bg-sidebar-accent/60"
+              required
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground">Confirm New Password</label>
+            <Input
+              type="password"
+              value={confirmPwd}
+              onChange={(e) => setConfirmPwd(e.target.value)}
+              className="mt-1 h-10 bg-sidebar-accent/60"
+              required
+            />
+          </div>
+          {msg && (
+            <div className={`rounded-lg px-3 py-2 text-sm ${msg.type === "success" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}>
+              {msg.text}
+            </div>
+          )}
+          <Button type="submit" disabled={loading} className="btn-gold-gradient h-10">
+            {loading ? "Updating..." : "Update Password"}
+          </Button>
+        </form>
+      </Card>
+
+      <Card className="card-gradient p-6">
+        <h3 className="font-bold mb-4">Account Information</h3>
+        <div className="space-y-2 text-sm">
+          <div className="flex justify-between"><span className="text-muted-foreground">UID</span><span className="font-mono text-amber-500">{user?.uid}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Email</span><span>{user?.email}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Role</span><span className="capitalize">{user?.role.toLowerCase()}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">KYC Status</span><span className="capitalize">{user?.kycStatus.toLowerCase()}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Invitation Code</span><span className="font-mono">{user?.invitationCode || "—"}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Referral Code</span><span className="font-mono">{user?.referralCode}</span></div>
+        </div>
+      </Card>
     </div>
   );
 }
