@@ -16,12 +16,13 @@
 
 set -euo pipefail
 
-REPO_URL="https://github.com/uzzirulzz-cyber/brockExchange.git"
+REPO_URL="https://github.com/uzzirulzz-cyber/newbrock.git"
 TARBALL="brockExchange-full.tar.gz"
-DEST_DIR="brockExchange"
+DEST_DIR="newbrock"
 
 echo "═══════════════════════════════════════════════════════"
 echo "  BlockExchange.buzz — GitHub Push Script"
+echo "  Target: uzzirulzz-cyber/newbrock"
 echo "═══════════════════════════════════════════════════════"
 echo ""
 
@@ -66,8 +67,9 @@ echo "📤 Pushing to GitHub..."
 echo "   Repository: $REPO_URL"
 echo ""
 echo "   When prompted:"
-echo "   - Username: your GitHub username"
+echo "   - Username: your GitHub username (uzzirulzz-cyber)"
 echo "   - Password: your GitHub Personal Access Token (not your account password)"
+echo "   Get a token at: GitHub → Settings → Developer settings → Personal access tokens → Generate new token (repo scope)"
 echo ""
 
 git push -u origin main --force
@@ -78,11 +80,11 @@ echo "  ✅ Successfully pushed to GitHub!"
 echo "═══════════════════════════════════════════════════════"
 echo ""
 echo "  Your repository is now live at:"
-echo "  https://github.com/uzzirulzz-cyber/brockExchange"
+echo "  https://github.com/uzzirulzz-cyber/newbrock"
 echo ""
 echo "  To deploy to Vercel:"
 echo "  1. Go to https://vercel.com/new"
-echo "  2. Import the brockExchange repository"
+echo "  2. Import the newbrock repository"
 echo "  3. Add environment variables from .env.example"
 echo "  4. Run: bun run db:push && bun run db:seed"
 echo "═══════════════════════════════════════════════════════"
