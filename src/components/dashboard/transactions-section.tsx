@@ -24,8 +24,8 @@ import {
   TableCell,
   TableHead,
   TableHeader,
+  TableRow,
 } from "@/components/ui/table";
-import { TableRow } from "@/components/ui/table";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,6 +34,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { transactions, type Transaction } from "@/lib/dashboard-data";
 import { fmtUsd, fmtAssetAmount, fmtNum } from "@/lib/format";
+import {
+  useSortableTable,
+  SortIndicator,
+  type SortableColumn,
+} from "@/hooks/use-sortable-table";
 
 const TYPE_META: Record<
   Transaction["type"],
@@ -55,12 +60,36 @@ const STATUS_META: Record<
   review: { icon: AlertCircle, className: "bg-purple-500/15 text-purple-400 hover:bg-purple-500/20" },
 };
 
+// Indexed ranks for sort
+const TYPE_INDEX: Record<Transaction["type"], number> = {
+  trade: 0,
+  deposit: 1,
+  withdrawal: 2,
+  transfer: 3,
+};
+const STATUS_INDEX: Record<Transaction["status"], number> = {
+  completed: 0,
+  pending: 1,
+  review: 2,
+  failed: 3,
+};
+
+type SortKey = "id" | "type" | "user" | "amountUsd" | "timestamp" | "status";
+
+const COLUMNS: SortableColumn<SortKey>[] = [
+  { key: "id", label: "Transaction" },
+  { key: "user", label: "User" },
+  { key: "amountUsd", label: "USD Value" },
+  { key: "timestamp", label: "Timestamp" },
+  { key: "status", label: "Status" },
+];
+
 export function TransactionsSection() {
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | Transaction["type"]>("all");
   const [statusFilter, setStatusFilter] = useState<"all" | Transaction["status"]>("all");
 
-  const rows = useMemo(() => {
+  const filtered = useMemo(() => {
     return transactions.filter((t) => {
       if (typeFilter !== "all" && t.type !== typeFilter) return false;
       if (statusFilter !== "all" && t.status !== statusFilter) return false;
@@ -75,6 +104,11 @@ export function TransactionsSection() {
       return true;
     });
   }, [query, typeFilter, statusFilter]);
+
+  const { sort, sorted, toggle } = useSortableTable<Transaction, SortKey>(filtered, {
+    initial: { key: "timestamp", dir: "desc" },
+    indexes: { type: TYPE_INDEX, status: STATUS_INDEX },
+  });
 
   const totalVolume = transactions.reduce((s, t) => s + t.amountUsd, 0);
   const pendingCount = transactions.filter((t) => t.status === "pending").length;
@@ -139,22 +173,42 @@ export function TransactionsSection() {
           </Button>
         </div>
 
+        {sort.key && (
+          <div className="flex items-center gap-2 px-4 py-2 border-b border-border text-xs text-muted-foreground bg-muted/10">
+            <span>Sorted by</span>
+            <Badge variant="secondary" className="bg-sky-500/15 text-sky-400 capitalize">
+              {sort.key} {sort.dir === "asc" ? "↑" : "↓"}
+            </Badge>
+            <span className="text-[10px]">· indexed rank sort on type and status — click any header to re-sort</span>
+          </div>
+        )}
+
         {/* Table */}
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent border-border">
-                <TableHead className="pl-4">Transaction</TableHead>
-                <TableHead className="hidden md:table-cell">User</TableHead>
+                <TableHead className="pl-4">
+                  <HeaderButton col={COLUMNS[0]} sort={sort} onToggle={toggle} />
+                </TableHead>
+                <TableHead className="hidden md:table-cell">
+                  <HeaderButton col={COLUMNS[1]} sort={sort} onToggle={toggle} />
+                </TableHead>
                 <TableHead className="text-right">Amount</TableHead>
-                <TableHead className="text-right hidden sm:table-cell">USD Value</TableHead>
-                <TableHead className="hidden lg:table-cell">Timestamp</TableHead>
-                <TableHead className="text-center">Status</TableHead>
+                <TableHead className="text-right">
+                  <HeaderButton col={COLUMNS[2]} sort={sort} onToggle={toggle} align="right" />
+                </TableHead>
+                <TableHead className="hidden lg:table-cell">
+                  <HeaderButton col={COLUMNS[3]} sort={sort} onToggle={toggle} />
+                </TableHead>
+                <TableHead className="text-center">
+                  <HeaderButton col={COLUMNS[4]} sort={sort} onToggle={toggle} align="center" />
+                </TableHead>
                 <TableHead className="text-right pr-4"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((t) => {
+              {sorted.map((t) => {
                 const TypeIcon = TYPE_META[t.type].icon;
                 const StatusMeta = STATUS_META[t.status];
                 const StatusIcon = StatusMeta.icon;
@@ -197,7 +251,7 @@ export function TransactionsSection() {
                       <div className="text-sm font-mono">{fmtAssetAmount(t.amount, t.asset)}</div>
                       <div className="text-[10px] text-muted-foreground">{t.asset}</div>
                     </TableCell>
-                    <TableCell className="text-right py-3 hidden sm:table-cell font-mono text-sm">
+                    <TableCell className="text-right py-3 font-mono text-sm">
                       {fmtUsd(t.amountUsd)}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell py-3 text-xs text-muted-foreground font-mono">
@@ -230,7 +284,7 @@ export function TransactionsSection() {
                   </TableRow>
                 );
               })}
-              {rows.length === 0 && (
+              {sorted.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-12 text-muted-foreground text-sm">
                     No transactions match your filters.
@@ -243,13 +297,39 @@ export function TransactionsSection() {
 
         <div className="flex items-center justify-between px-4 py-3 border-t border-border text-xs text-muted-foreground">
           <span>
-            Showing <span className="text-foreground font-medium">{rows.length}</span> of{" "}
+            Showing <span className="text-foreground font-medium">{sorted.length}</span> of{" "}
             <span className="text-foreground font-medium">{transactions.length}</span> transactions
           </span>
           <span className="font-mono">{fmtNum(totalVolume, 0)} USD total volume</span>
         </div>
       </Card>
     </div>
+  );
+}
+
+function HeaderButton({
+  col,
+  sort,
+  onToggle,
+  align = "left",
+}: {
+  col: SortableColumn<any>;
+  sort: { key: string | null; dir: "asc" | "desc" | null };
+  onToggle: (key: any) => void;
+  align?: "left" | "right" | "center";
+}) {
+  const active = sort.key === col.key;
+  const justify = align === "right" ? "justify-end" : align === "center" ? "justify-center" : "justify-start";
+  return (
+    <button
+      onClick={() => onToggle(col.key)}
+      className={`inline-flex items-center gap-1 hover:text-foreground transition-colors ${align === "right" ? "w-full" : ""} ${justify} ${
+        active ? "text-foreground" : "text-muted-foreground"
+      }`}
+    >
+      {col.label}
+      <SortIndicator dir={active ? sort.dir : null} />
+    </button>
   );
 }
 

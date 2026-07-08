@@ -35,6 +35,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { users, type UserRecord } from "@/lib/dashboard-data";
 import { fmtUsd, fmtNum } from "@/lib/format";
+import {
+  useSortableTable,
+  SortIndicator,
+  type SortableColumn,
+} from "@/hooks/use-sortable-table";
 
 const KYC_META: Record<
   UserRecord["kyc"],
@@ -46,20 +51,47 @@ const KYC_META: Record<
   unverified: { label: "Unverified", icon: ShieldAlert, className: "bg-muted text-muted-foreground hover:bg-muted/80" },
 };
 
-const STATUS_META: Record<
-  UserRecord["status"],
-  { className: string }
-> = {
+const STATUS_META: Record<UserRecord["status"], { className: string }> = {
   active: { className: "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/20" },
   suspended: { className: "bg-amber-500/15 text-amber-400 hover:bg-amber-500/20" },
   frozen: { className: "bg-red-500/15 text-red-400 hover:bg-red-500/20" },
 };
 
+// Indexed sort ranks — verified before pending before unverified before rejected
+const KYC_INDEX: Record<UserRecord["kyc"], number> = {
+  verified: 0,
+  unverified: 1,
+  pending: 2,
+  rejected: 3,
+};
+const STATUS_INDEX: Record<UserRecord["status"], number> = {
+  active: 0,
+  suspended: 1,
+  frozen: 2,
+};
+const TIER_INDEX: Record<UserRecord["tier"], number> = {
+  "Tier 3": 0,
+  "Tier 2": 1,
+  "Tier 1": 2,
+};
+
+type SortKey = "name" | "id" | "joinedAt" | "kyc" | "tier" | "balanceUsd" | "status";
+
+const COLUMNS: SortableColumn<SortKey>[] = [
+  { key: "name", label: "User" },
+  { key: "id", label: "User ID" },
+  { key: "joinedAt", label: "Joined" },
+  { key: "kyc", label: "KYC" },
+  { key: "tier", label: "Tier" },
+  { key: "balanceUsd", label: "Balance" },
+  { key: "status", label: "Status" },
+];
+
 export function UsersSection() {
   const [query, setQuery] = useState("");
   const [kycFilter, setKycFilter] = useState<"all" | UserRecord["kyc"]>("all");
 
-  const rows = useMemo(() => {
+  const filtered = useMemo(() => {
     return users.filter((u) => {
       if (kycFilter !== "all" && u.kyc !== kycFilter) return false;
       if (query) {
@@ -73,6 +105,11 @@ export function UsersSection() {
       return true;
     });
   }, [query, kycFilter]);
+
+  const { sort, sorted, toggle } = useSortableTable<UserRecord, SortKey>(filtered, {
+    initial: { key: "balanceUsd", dir: "desc" },
+    indexes: { kyc: KYC_INDEX, status: STATUS_INDEX, tier: TIER_INDEX },
+  });
 
   const totalUsers = 48219;
   const verified = Math.round(totalUsers * 0.62);
@@ -128,23 +165,47 @@ export function UsersSection() {
           </div>
         </div>
 
+        {sort.key && (
+          <div className="flex items-center gap-2 px-4 py-2 border-b border-border text-xs text-muted-foreground bg-muted/10">
+            <span>Sorted by</span>
+            <Badge variant="secondary" className="bg-sky-500/15 text-sky-400 capitalize">
+              {sort.key} {sort.dir === "asc" ? "↑" : "↓"}
+            </Badge>
+            <span className="text-[10px]">· indexed rank sort on KYC, status, and tier — click any header to re-sort</span>
+          </div>
+        )}
+
         {/* Table */}
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent border-border">
-                <TableHead className="pl-4">User</TableHead>
-                <TableHead className="hidden md:table-cell">User ID</TableHead>
-                <TableHead className="hidden lg:table-cell">Joined</TableHead>
-                <TableHead className="text-center">KYC</TableHead>
-                <TableHead className="hidden sm:table-cell text-center">Tier</TableHead>
-                <TableHead className="text-right">Balance</TableHead>
-                <TableHead className="text-center">Status</TableHead>
+                <TableHead className="pl-4">
+                  <HeaderButton col={COLUMNS[0]} sort={sort} onToggle={toggle} />
+                </TableHead>
+                <TableHead className="hidden md:table-cell">
+                  <HeaderButton col={COLUMNS[1]} sort={sort} onToggle={toggle} />
+                </TableHead>
+                <TableHead className="hidden lg:table-cell">
+                  <HeaderButton col={COLUMNS[2]} sort={sort} onToggle={toggle} />
+                </TableHead>
+                <TableHead className="text-center">
+                  <HeaderButton col={COLUMNS[3]} sort={sort} onToggle={toggle} align="center" />
+                </TableHead>
+                <TableHead className="hidden sm:table-cell text-center">
+                  <HeaderButton col={COLUMNS[4]} sort={sort} onToggle={toggle} align="center" />
+                </TableHead>
+                <TableHead className="text-right">
+                  <HeaderButton col={COLUMNS[5]} sort={sort} onToggle={toggle} align="right" />
+                </TableHead>
+                <TableHead className="text-center">
+                  <HeaderButton col={COLUMNS[6]} sort={sort} onToggle={toggle} align="center" />
+                </TableHead>
                 <TableHead className="text-right pr-4"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((u) => {
+              {sorted.map((u) => {
                 const Kyc = KYC_META[u.kyc];
                 const KycIcon = Kyc.icon;
                 return (
@@ -214,7 +275,7 @@ export function UsersSection() {
                   </TableRow>
                 );
               })}
-              {rows.length === 0 && (
+              {sorted.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-12 text-muted-foreground text-sm">
                     No users match your filters.
@@ -228,7 +289,7 @@ export function UsersSection() {
         {/* Pagination footer */}
         <div className="flex items-center justify-between px-4 py-3 border-t border-border text-xs text-muted-foreground">
           <span>
-            Showing <span className="text-foreground font-medium">{rows.length}</span> of{" "}
+            Showing <span className="text-foreground font-medium">{sorted.length}</span> of{" "}
             <span className="text-foreground font-medium">{users.length}</span> sample accounts
           </span>
           <div className="flex items-center gap-1">
@@ -242,6 +303,32 @@ export function UsersSection() {
         </div>
       </Card>
     </div>
+  );
+}
+
+function HeaderButton({
+  col,
+  sort,
+  onToggle,
+  align = "left",
+}: {
+  col: SortableColumn<any>;
+  sort: { key: string | null; dir: "asc" | "desc" | null };
+  onToggle: (key: any) => void;
+  align?: "left" | "right" | "center";
+}) {
+  const active = sort.key === col.key;
+  const justify = align === "right" ? "justify-end" : align === "center" ? "justify-center" : "justify-start";
+  return (
+    <button
+      onClick={() => onToggle(col.key)}
+      className={`inline-flex items-center gap-1 hover:text-foreground transition-colors ${align === "right" ? "w-full" : ""} ${justify} ${
+        active ? "text-foreground" : "text-muted-foreground"
+      }`}
+    >
+      {col.label}
+      <SortIndicator dir={active ? sort.dir : null} />
+    </button>
   );
 }
 

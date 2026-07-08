@@ -21,42 +21,48 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { marketPairs } from "@/lib/dashboard-data";
+import { marketPairs, type MarketPair } from "@/lib/dashboard-data";
 import { fmtUsd, fmtCompact } from "@/lib/format";
+import {
+  useSortableTable,
+  SortIndicator,
+  type SortableColumn,
+} from "@/hooks/use-sortable-table";
 
-type SortKey = "pair" | "lastPrice" | "change24h" | "volume24h";
-type SortDir = "asc" | "desc";
+// Indexed sort: status gets a custom rank order instead of alphabetical.
+const STATUS_INDEX: Record<MarketPair["status"], number> = {
+  active: 0,
+  paused: 1,
+  delisted: 2,
+};
+
+type SortKey = "pair" | "lastPrice" | "change24h" | "volume24h" | "status";
+
+const COLUMNS: SortableColumn<SortKey>[] = [
+  { key: "pair", label: "Pair" },
+  { key: "lastPrice", label: "Last Price" },
+  { key: "change24h", label: "24h %" },
+  { key: "volume24h", label: "24h Volume" },
+  { key: "status", label: "Status" },
+];
 
 export function MarketsSection() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "active" | "paused">("all");
-  const [sortKey, setSortKey] = useState<SortKey>("volume24h");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
-  const rows = useMemo(() => {
-    let out = marketPairs.filter((m) => {
+  const filtered = useMemo(() => {
+    return marketPairs.filter((m) => {
       if (filter === "active" && m.status !== "active") return false;
       if (filter === "paused" && m.status !== "paused") return false;
       if (query && !m.pair.toLowerCase().includes(query.toLowerCase())) return false;
       return true;
     });
-    out = [...out].sort((a, b) => {
-      let cmp = 0;
-      if (sortKey === "pair") cmp = a.pair.localeCompare(b.pair);
-      else cmp = (a[sortKey] as number) - (b[sortKey] as number);
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-    return out;
-  }, [query, filter, sortKey, sortDir]);
+  }, [query, filter]);
 
-  const toggleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir(sortDir === "asc" ? "desc" : "asc");
-    } else {
-      setSortKey(key);
-      setSortDir("desc");
-    }
-  };
+  const { sort, sorted, toggle } = useSortableTable<MarketPair, SortKey>(filtered, {
+    initial: { key: "volume24h", dir: "desc" },
+    indexes: { status: STATUS_INDEX },
+  });
 
   const totalVolume = marketPairs.reduce((s, m) => s + m.lastPrice * m.volume24h, 0);
   const activeCount = marketPairs.filter((m) => m.status === "active").length;
@@ -100,6 +106,15 @@ export function MarketsSection() {
               </button>
             ))}
           </div>
+          {sort.key && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Sorted by</span>
+              <Badge variant="secondary" className="bg-sky-500/15 text-sky-400 capitalize">
+                {sort.key} {sort.dir === "asc" ? "↑" : "↓"}
+              </Badge>
+              <span className="text-[10px]">click headers to cycle (asc → desc → none)</span>
+            </div>
+          )}
         </div>
 
         {/* Table */}
@@ -108,25 +123,27 @@ export function MarketsSection() {
             <TableHeader>
               <TableRow className="hover:bg-transparent border-border">
                 <TableHead className="pl-4">
-                  <SortButton label="Pair" active={sortKey === "pair"} dir={sortDir} onClick={() => toggleSort("pair")} />
+                  <HeaderButton col={COLUMNS[0]} sort={sort} onToggle={toggle} />
                 </TableHead>
                 <TableHead className="text-right">
-                  <SortButton label="Last Price" active={sortKey === "lastPrice"} dir={sortDir} onClick={() => toggleSort("lastPrice")} />
+                  <HeaderButton col={COLUMNS[1]} sort={sort} onToggle={toggle} align="right" />
                 </TableHead>
                 <TableHead className="text-right">
-                  <SortButton label="24h %" active={sortKey === "change24h"} dir={sortDir} onClick={() => toggleSort("change24h")} />
+                  <HeaderButton col={COLUMNS[2]} sort={sort} onToggle={toggle} align="right" />
                 </TableHead>
                 <TableHead className="text-right hidden md:table-cell">24h High</TableHead>
                 <TableHead className="text-right hidden md:table-cell">24h Low</TableHead>
                 <TableHead className="text-right">
-                  <SortButton label="24h Volume" active={sortKey === "volume24h"} dir={sortDir} onClick={() => toggleSort("volume24h")} />
+                  <HeaderButton col={COLUMNS[3]} sort={sort} onToggle={toggle} align="right" />
                 </TableHead>
-                <TableHead className="text-center hidden sm:table-cell">Status</TableHead>
+                <TableHead className="text-center hidden sm:table-cell">
+                  <HeaderButton col={COLUMNS[4]} sort={sort} onToggle={toggle} align="center" />
+                </TableHead>
                 <TableHead className="text-right pr-4"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((m) => (
+              {sorted.map((m) => (
                 <TableRow key={m.pair} className="border-border/50">
                   <TableCell className="pl-4 py-3">
                     <div className="flex items-center gap-3">
@@ -200,7 +217,7 @@ export function MarketsSection() {
                   </TableCell>
                 </TableRow>
               ))}
-              {rows.length === 0 && (
+              {sorted.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-12 text-muted-foreground text-sm">
                     No pairs match your filters.
@@ -212,6 +229,33 @@ export function MarketsSection() {
         </div>
       </Card>
     </div>
+  );
+}
+
+function HeaderButton({
+  col,
+  sort,
+  onToggle,
+  align = "left",
+}: {
+  col: SortableColumn<any>;
+  sort: { key: string | null; dir: "asc" | "desc" | null };
+  onToggle: (key: any) => void;
+  align?: "left" | "right" | "center";
+}) {
+  const active = sort.key === col.key;
+  const justify = align === "right" ? "justify-end" : align === "center" ? "justify-center" : "justify-start";
+  return (
+    <button
+      onClick={() => onToggle(col.key)}
+      className={`inline-flex items-center gap-1 hover:text-foreground transition-colors w-full ${justify} ${
+        active ? "text-foreground" : "text-muted-foreground"
+      }`}
+    >
+      {col.label}
+      <ArrowUpDown className={`h-3 w-3 ${active ? "opacity-100" : "opacity-40"}`} />
+      {active && <SortIndicator dir={sort.dir} />}
+    </button>
   );
 }
 
@@ -251,30 +295,5 @@ function StatusBadge({ status }: { status: "active" | "paused" | "delisted" }) {
     <Badge variant="secondary" className={`capitalize ${map[status]}`}>
       {status}
     </Badge>
-  );
-}
-
-function SortButton({
-  label,
-  active,
-  dir,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  dir: SortDir;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`inline-flex items-center gap-1 hover:text-foreground transition-colors ${
-        active ? "text-foreground" : "text-muted-foreground"
-      }`}
-    >
-      {label}
-      <ArrowUpDown className={`h-3 w-3 ${active ? "opacity-100" : "opacity-40"}`} />
-      {active && <span className="text-[10px]">{dir === "asc" ? "↑" : "↓"}</span>}
-    </button>
   );
 }
