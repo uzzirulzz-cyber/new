@@ -23,8 +23,8 @@ export const metadata: Metadata = {
   keywords: ["BlockExchange", "crypto", "exchange", "trading", "bitcoin", "ethereum"],
   authors: [{ name: "BlockExchange.buzz" }],
   icons: {
-    icon: "/brock-mark.svg",
-    apple: "/brock-logo.png",
+    icon: "/blockexchange-mark.svg",
+    apple: "/blockexchange-logo.png",
   },
 };
 

@@ -3,9 +3,11 @@
 import Image from "next/image";
 
 /**
- * Brock Exchange brand lockup.
- * - `compact` (default): circular PB mark + "BROCK" wordmark with gold "O"
- * - `full`: includes the "EXCHANGE" subtitle and tagline
+ * BlockExchange.buzz brand lockup.
+ * Matches the official logo:
+ * - Circular gold outline with overlapping B (gold) + E (white)
+ * - Wordmark: "BLOCK" (white) + "EXCHANGE" (gold) + ".BUZZ" (white, smaller)
+ * - Tagline: "TRADE SMARTER. GROW FASTER."
  */
 export function Brand({
   variant = "compact",
@@ -16,62 +18,56 @@ export function Brand({
   size?: "sm" | "md" | "lg";
   showTagline?: boolean;
 }) {
-  const markSize = size === "sm" ? 28 : size === "lg" ? 44 : 36;
-  const titleSize = size === "sm" ? "text-sm" : size === "lg" ? "text-xl" : "text-base";
+  const markSize = size === "sm" ? 28 : size === "lg" ? 48 : 36;
+  const titleSize = size === "sm" ? "text-sm" : size === "lg" ? "text-2xl" : "text-base";
+  const buzzSize = size === "sm" ? "text-[8px]" : size === "lg" ? "text-xs" : "text-[10px]";
 
   if (variant === "full") {
     return (
       <div className="flex flex-col items-center text-center">
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-3">
           <Image
-            src="/brock-mark.svg"
-            alt="Brock Exchange mark"
+            src="/blockexchange-mark.svg"
+            alt="BlockExchange.buzz mark"
             width={markSize}
             height={markSize}
             className="shrink-0"
           />
-          <span className={`${titleSize} font-extrabold tracking-wider`}>
-            <span className="text-white">BR</span>
-            <span className="text-amber-500">O</span>
-            <span className="text-white">CK</span>
-          </span>
-        </div>
-        <div className="flex items-center gap-2 mt-1">
-          <span className="h-px w-4 bg-blue-500" />
-          <span className="text-[10px] uppercase tracking-[0.3em] text-blue-500 font-semibold">
-            Exchange
-          </span>
-          <span className="h-px w-4 bg-blue-500" />
+          <div className="flex flex-col leading-tight">
+            <div className="flex items-baseline">
+              <span className={`${titleSize} font-extrabold tracking-tight text-white`}>BLOCK</span>
+              <span className={`${titleSize} font-extrabold tracking-tight text-amber-500`}>EXCHANGE</span>
+              <span className={`${buzzSize} font-bold text-white ml-0.5`}>.BUZZ</span>
+            </div>
+          </div>
         </div>
         {showTagline && (
-          <p className="mt-2 text-[10px] uppercase tracking-wider">
-            <span className="text-white">Trade Smarter.</span>{" "}
-            <span className="text-amber-500">Grow Faster.</span>
+          <p className="mt-2 text-[10px] uppercase tracking-[0.2em] font-medium">
+            <span className="text-white">TRADE SMARTER.</span>{" "}
+            <span className="text-amber-500">GROW FASTER.</span>
           </p>
         )}
       </div>
     );
   }
 
+  // Compact — sidebar/header lockup
   return (
     <div className="flex items-center gap-2.5">
       <Image
-        src="/brock-mark.svg"
-        alt="Brock Exchange"
+        src="/blockexchange-mark.svg"
+        alt="BlockExchange.buzz"
         width={markSize}
         height={markSize}
         className="shrink-0"
         priority
       />
       <div className="flex flex-col leading-tight">
-        <span className={`${titleSize} font-extrabold tracking-wider`}>
-          <span className="text-white">BR</span>
-          <span className="text-amber-500">O</span>
-          <span className="text-white">CK</span>
-        </span>
-        <span className="text-[9px] uppercase tracking-[0.25em] text-blue-400 font-semibold">
-          Exchange
-        </span>
+        <div className="flex items-baseline">
+          <span className={`${titleSize} font-extrabold tracking-tight text-white`}>BLOCK</span>
+          <span className={`${titleSize} font-extrabold tracking-tight text-amber-500`}>EXCHANGE</span>
+          <span className={`${buzzSize} font-bold text-white ml-0.5`}>.BUZZ</span>
+        </div>
       </div>
     </div>
   );

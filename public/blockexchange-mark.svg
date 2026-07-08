@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <!-- Circular gold outline (thin, elegant) -->
+  <circle cx="50" cy="50" r="44" stroke="#f59e0b" stroke-width="2.5" fill="none"/>
+
+  <!-- Diagonal gold line splitting B and E -->
+  <line x1="50" y1="14" x2="50" y2="86" stroke="#f59e0b" stroke-width="1.5" opacity="0.6"/>
+
+  <!-- Gold "B" (left side) -->
+  <text x="28" y="62" font-family="Inter, Arial, sans-serif" font-size="38" font-weight="900" fill="#f59e0b" text-anchor="middle">B</text>
+
+  <!-- White "E" (right side, slightly overlapping) -->
+  <text x="70" y="62" font-family="Inter, Arial, sans-serif" font-size="38" font-weight="900" fill="#f8fafc" text-anchor="middle">E</text>
+</svg>
