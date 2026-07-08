@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
+import { useHashRoute } from "@/hooks/use-hash-route";
 import { Brand } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,9 +35,12 @@ const NAV: { key: AdminSection; label: string; icon: any; group: string }[] = [
 
 export function AdminShell() {
   const { user, logout } = useAuth();
-  const [section, setSection] = useState<AdminSection>("dashboard");
+  const { route, navigate: navigateHash } = useHashRoute("dashboard");
+  const section = (route.section as AdminSection) || "dashboard";
   const [mobileNav, setMobileNav] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+
+  const navigate = (s: AdminSection) => navigateHash(s);
 
   useEffect(() => {
     fetch("/api/admin/stats").then(r => r.json()).then(d => {
@@ -68,7 +72,7 @@ export function AdminShell() {
                   return (
                     <button
                       key={item.key}
-                      onClick={() => setSection(item.key)}
+                      onClick={() => navigate(item.key)}
                       className={`group relative w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all ${
                         active ? "nav-active-gold font-semibold" : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
                       }`}
@@ -115,7 +119,7 @@ export function AdminShell() {
                         const active = section === item.key;
                         return (
                           <button key={item.key}
-                            onClick={() => { setSection(item.key); setMobileNav(false); }}
+                            onClick={() => { navigate(item.key); setMobileNav(false); }}
                             className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${
                               active ? "nav-active-gold font-semibold" : "text-muted-foreground hover:bg-sidebar-accent"
                             }`}>

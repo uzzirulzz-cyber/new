@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Home, LayoutDashboard, CandlestickChart, Wallet, BarChart3, User,
@@ -8,6 +8,7 @@ import {
   Menu, X, LogOut, Search, ChevronDown,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { useHashRoute } from "@/hooks/use-hash-route";
 import { Brand } from "@/components/brand";
 import { TickerTape } from "@/components/ticker-tape";
 import { Button } from "@/components/ui/button";
@@ -46,23 +47,25 @@ const NAV: { key: CustomerSection; label: string; icon: any; group: string }[] =
 
 export function CustomerShell() {
   const { user, wallet, logout, refresh } = useAuth();
-  const [section, setSection] = useState<CustomerSection>("home");
+  const { route, navigate: navigateHash } = useHashRoute("home");
   const [mobileNav, setMobileNav] = useState(false);
-  const [selectedCoin, setSelectedCoin] = useState<string | null>(null);
+
+  // Derive section + selected coin from the URL hash
+  const section = (route.section as CustomerSection) || "home";
+  const selectedCoin = route.params.get("coin");
+
+  // Navigate to a section (updates the URL hash → bookmarkable)
+  const navigate = (s: CustomerSection) => {
+    if (s === "home" || s === "dashboard") {
+      navigateHash("home");
+    } else {
+      navigateHash(s);
+    }
+  };
 
   // Navigate to trade screen with a specific coin pre-selected
   const navigateToTrade = (coin: string) => {
-    setSelectedCoin(coin);
-    setSection("trade");
-  };
-
-  const navigate = (s: CustomerSection) => {
-    if (s === "home" || s === "dashboard") {
-      // "Home" and "Dashboard" both go to dashboard view (no reload)
-      setSection("home");
-    } else {
-      setSection(s);
-    }
+    navigateHash("trade", { coin });
   };
 
   const groups = Array.from(new Set(NAV.map((n) => n.group)));
@@ -81,7 +84,9 @@ export function CustomerShell() {
               <div className="space-y-1">
                 {NAV.filter((n) => n.group === group).map((item) => {
                   const Icon = item.icon;
-                  const active = section === item.key;
+                  const active = (item.key === "home" || item.key === "dashboard")
+                    ? (section === "home" || section === "dashboard")
+                    : section === item.key;
                   return (
                     <button
                       key={item.key}
@@ -138,7 +143,9 @@ export function CustomerShell() {
                     <div className="space-y-1">
                       {NAV.filter((n) => n.group === group).map((item) => {
                         const Icon = item.icon;
-                        const active = section === item.key;
+                        const active = (item.key === "home" || item.key === "dashboard")
+                          ? (section === "home" || section === "dashboard")
+                          : section === item.key;
                         return (
                           <button key={item.key}
                             onClick={() => { navigate(item.key); setMobileNav(false); }}

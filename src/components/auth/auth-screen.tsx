@@ -172,17 +172,9 @@ export function AuthScreen() {
                     {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Sign In <ArrowRight className="ml-2 h-4 w-4" /></>}
                   </Button>
 
-                  <div className="rounded-lg bg-blue-500/5 border border-blue-500/20 px-3 py-2.5 text-xs text-slate-400 space-y-2">
-                    <div>
-                      <p className="font-semibold text-blue-400">Super Admin:</p>
-                      <p>Email: crdbixx@gmail.com · Password: 123playbeat</p>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-purple-400">Sub-Agent:</p>
-                      <p>Email: subagent1@trade.com · Password: default</p>
-                    </div>
-                    <p className="text-[10px] text-amber-500">Customer registration requires invitation code: PB-AG001</p>
-                  </div>
+                  <p className="text-[10px] text-center text-slate-500">
+                    Don't have an account? Ask your referrer for an invitation code.
+                  </p>
                 </form>
               </TabsContent>
 

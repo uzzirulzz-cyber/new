@@ -8,6 +8,7 @@ import {
   TrendingUp, DollarSign, Trophy, UserCheck, Copy, Check,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { useHashRoute } from "@/hooks/use-hash-route";
 import { Brand } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,8 +34,11 @@ const NAV: { key: AgentSection; label: string; icon: any }[] = [
 
 export function AgentShell() {
   const { user, logout } = useAuth();
-  const [section, setSection] = useState<AgentSection>("dashboard");
+  const { route, navigate: navigateHash } = useHashRoute("dashboard");
+  const section = (route.section as AgentSection) || "dashboard";
   const [mobileNav, setMobileNav] = useState(false);
+
+  const navigate = (s: AgentSection) => navigateHash(s);
 
   return (
     <div className="min-h-screen flex">
@@ -54,7 +58,7 @@ export function AgentShell() {
             return (
               <button
                 key={item.key}
-                onClick={() => setSection(item.key)}
+                onClick={() => navigate(item.key)}
                 className={`group relative w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all ${
                   active ? "nav-active-gold font-semibold" : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
                 }`}
@@ -96,7 +100,7 @@ export function AgentShell() {
                   const active = section === item.key;
                   return (
                     <button key={item.key}
-                      onClick={() => { setSection(item.key); setMobileNav(false); }}
+                      onClick={() => { navigate(item.key); setMobileNav(false); }}
                       className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${
                         active ? "nav-active-gold font-semibold" : "text-muted-foreground hover:bg-sidebar-accent"
                       }`}>
