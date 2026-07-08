@@ -17,6 +17,7 @@ export interface AuthUser {
   profilePhoto: string | null;
   lastLogin: string | null;
   lastLoginIp: string | null;
+  mustChangePassword: boolean;
   createdAt: string;
 }
 
@@ -43,6 +44,11 @@ interface AuthContextValue {
     confirmPassword: string;
   }) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
+  changePassword: (data: {
+    currentPassword?: string;
+    newPassword: string;
+    confirmPassword: string;
+  }) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -113,8 +119,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setWallet(null);
   }, []);
 
+  const changePassword = useCallback(async (pwdData: any) => {
+    try {
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(pwdData),
+      });
+      const data = await res.json();
+      if (!res.ok) return { success: false, error: data.error || "Failed to change password" };
+      await refresh();
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
+  }, [refresh]);
+
   return (
-    <AuthContext.Provider value={{ user, wallet, loading, refresh, login, register, logout }}>
+    <AuthContext.Provider value={{ user, wallet, loading, refresh, login, register, logout, changePassword }}>
       {children}
     </AuthContext.Provider>
   );

@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  LayoutDashboard, CandlestickChart, Wallet, BarChart3, User,
+  Home, LayoutDashboard, CandlestickChart, Wallet, BarChart3, User,
   ArrowDownLeft, ArrowUpRight, ArrowLeftRight, History, Bell,
-  Menu, X, LogOut, Search, ChevronDown, Settings,
+  Menu, X, LogOut, Search, ChevronDown,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Brand } from "@/components/brand";
@@ -27,10 +27,11 @@ import { CustomerProfile } from "./customer-profile";
 import { CustomerTransactions } from "./customer-transactions";
 
 export type CustomerSection =
-  | "dashboard" | "trade" | "wallet" | "analytics"
+  | "home" | "dashboard" | "trade" | "wallet" | "analytics"
   | "recharge" | "withdraw" | "transfer" | "history" | "profile" | "notifications";
 
 const NAV: { key: CustomerSection; label: string; icon: any; group: string }[] = [
+  { key: "home", label: "Home", icon: Home, group: "Main" },
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard, group: "Main" },
   { key: "trade", label: "Trade", icon: CandlestickChart, group: "Main" },
   { key: "analytics", label: "Analytics", icon: BarChart3, group: "Main" },
@@ -45,8 +46,24 @@ const NAV: { key: CustomerSection; label: string; icon: any; group: string }[] =
 
 export function CustomerShell() {
   const { user, wallet, logout, refresh } = useAuth();
-  const [section, setSection] = useState<CustomerSection>("dashboard");
+  const [section, setSection] = useState<CustomerSection>("home");
   const [mobileNav, setMobileNav] = useState(false);
+  const [selectedCoin, setSelectedCoin] = useState<string | null>(null);
+
+  // Navigate to trade screen with a specific coin pre-selected
+  const navigateToTrade = (coin: string) => {
+    setSelectedCoin(coin);
+    setSection("trade");
+  };
+
+  const navigate = (s: CustomerSection) => {
+    if (s === "home" || s === "dashboard") {
+      // "Home" and "Dashboard" both go to dashboard view (no reload)
+      setSection("home");
+    } else {
+      setSection(s);
+    }
+  };
 
   const groups = Array.from(new Set(NAV.map((n) => n.group)));
 
@@ -68,7 +85,7 @@ export function CustomerShell() {
                   return (
                     <button
                       key={item.key}
-                      onClick={() => setSection(item.key)}
+                      onClick={() => navigate(item.key)}
                       className={`group relative w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all ${
                         active ? "nav-active-gold font-semibold" : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
                       }`}
@@ -92,7 +109,7 @@ export function CustomerShell() {
             <Button
               size="sm"
               className="w-full mt-2 h-7 btn-gold-gradient text-xs"
-              onClick={() => setSection("recharge")}
+              onClick={() => navigate("recharge")}
             >
               <ArrowDownLeft className="h-3 w-3 mr-1" /> Recharge Funds
             </Button>
@@ -124,7 +141,7 @@ export function CustomerShell() {
                         const active = section === item.key;
                         return (
                           <button key={item.key}
-                            onClick={() => { setSection(item.key); setMobileNav(false); }}
+                            onClick={() => { navigate(item.key); setMobileNav(false); }}
                             className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${
                               active ? "nav-active-gold font-semibold" : "text-muted-foreground hover:bg-sidebar-accent"
                             }`}>
@@ -149,7 +166,7 @@ export function CustomerShell() {
             <Menu className="h-5 w-5" />
           </Button>
           <div className="hidden md:block">
-            <h1 className="text-lg font-bold capitalize">{section}</h1>
+            <h1 className="text-lg font-bold capitalize">{section === "home" ? "Home" : section}</h1>
             <p className="text-xs text-muted-foreground">BlockExchange.buzz · Trade Smarter. Grow Faster.</p>
           </div>
           <div className="ml-auto flex items-center gap-2 lg:gap-3">
@@ -176,13 +193,13 @@ export function CustomerShell() {
                 <DropdownMenuLabel>{user?.name}</DropdownMenuLabel>
                 <p className="px-2 text-[10px] text-muted-foreground">{user?.email}</p>
                 <DropdownMenuSeparator className="bg-sidebar-border" />
-                <DropdownMenuItem onClick={() => setSection("profile")}>
+                <DropdownMenuItem onClick={() => navigate("profile")}>
                   <User className="mr-2 h-4 w-4" /> Profile
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSection("notifications")}>
+                <DropdownMenuItem onClick={() => navigate("notifications")}>
                   <Bell className="mr-2 h-4 w-4" /> Notifications
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSection("wallet")}>
+                <DropdownMenuItem onClick={() => navigate("wallet")}>
                   <Wallet className="mr-2 h-4 w-4" /> Wallet
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-sidebar-border" />
@@ -199,14 +216,16 @@ export function CustomerShell() {
         <main className="flex-1 p-4 lg:p-6">
           <AnimatePresence mode="wait">
             <motion.div
-              key={section}
+              key={section + (selectedCoin || "")}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.2 }}
             >
-              {section === "dashboard" && <CustomerDashboard onNavigate={setSection} />}
-              {section === "trade" && <CustomerTrade onSettled={refresh} />}
+              {(section === "home" || section === "dashboard") && (
+                <CustomerDashboard onNavigate={navigate} onTradeCoin={navigateToTrade} />
+              )}
+              {section === "trade" && <CustomerTrade onSettled={refresh} initialCoin={selectedCoin} />}
               {section === "wallet" && <CustomerWallet />}
               {section === "analytics" && <CustomerAnalytics />}
               {section === "recharge" && <CustomerWallet mode="recharge" />}

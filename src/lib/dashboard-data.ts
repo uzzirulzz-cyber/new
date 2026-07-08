@@ -70,6 +70,11 @@ export const marketPairs: MarketPair[] = [
   { pair: "DOT/USDT", base: "DOT", quote: "USDT", lastPrice: 6.84, change24h: -0.62, high24h: 7.02, low24h: 6.78, volume24h: 521300.0, status: "active", icon: "●", iconColor: "#e6007a" },
   { pair: "LINK/USDT", base: "LINK", quote: "USDT", lastPrice: 14.32, change24h: 3.78, high24h: 14.6, low24h: 13.85, volume24h: 821400.0, status: "active", icon: "⬡", iconColor: "#2a5ada" },
   { pair: "SHIB/USDT", base: "SHIB", quote: "USDT", lastPrice: 0.0000234, change24h: 12.45, high24h: 0.0000248, low24h: 0.0000208, volume24h: 84210000.0, status: "active", icon: "🐕", iconColor: "#f00500" },
+  { pair: "LTC/USDT", base: "LTC", quote: "USDT", lastPrice: 84.32, change24h: 1.92, high24h: 86.5, low24h: 82.8, volume24h: 312400.0, status: "active", icon: "Ł", iconColor: "#345d9d" },
+  { pair: "TRX/USDT", base: "TRX", quote: "USDT", lastPrice: 0.1284, change24h: -0.85, high24h: 0.1310, low24h: 0.1275, volume24h: 4210300.0, status: "active", icon: "Τ", iconColor: "#ff060a" },
+  { pair: "BCH/USDT", base: "BCH", quote: "USDT", lastPrice: 412.5, change24h: 3.45, high24h: 418.0, low24h: 405.2, volume24h: 82100.0, status: "active", icon: "Ƀ", iconColor: "#0ac18e" },
+  { pair: "BTG/USDT", base: "BTG", quote: "USDT", lastPrice: 28.42, change24h: 2.18, high24h: 29.1, low24h: 27.9, volume24h: 42100.0, status: "active", icon: "₿", iconColor: "#eba809" },
+  { pair: "BTS/USDT", base: "BTS", quote: "USDT", lastPrice: 0.0234, change24h: -4.12, high24h: 0.0248, low24h: 0.0228, volume24h: 8420000.0, status: "active", icon: "Β", iconColor: "#0066cc" },
 ];
 
 export interface UserRecord {

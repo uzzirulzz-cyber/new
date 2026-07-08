@@ -95,6 +95,7 @@ export async function getCurrentUser() {
       lastLogin: true,
       lastLoginIp: true,
       lastLoginDevice: true,
+      mustChangePassword: true,
       createdAt: true,
     },
   });

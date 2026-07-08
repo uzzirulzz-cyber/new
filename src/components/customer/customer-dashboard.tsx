@@ -21,7 +21,7 @@ interface DashboardData {
   system: any[];
 }
 
-export function CustomerDashboard({ onNavigate }: { onNavigate: (s: CustomerSection) => void }) {
+export function CustomerDashboard({ onNavigate, onTradeCoin }: { onNavigate: (s: CustomerSection) => void; onTradeCoin?: (coin: string) => void }) {
   const { user, wallet } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
   const [favorites, setFavorites] = useState<Set<string>>(new Set(["BTC", "ETH"]));
@@ -118,7 +118,13 @@ export function CustomerDashboard({ onNavigate }: { onNavigate: (s: CustomerSect
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {popularCoins.map((coin) => (
-                <CoinCard key={coin.base} coin={coin} onTrade={() => onNavigate("trade")} onFav={toggleFav} isFav={favorites.has(coin.base)} />
+                <CoinCard
+                  key={coin.base}
+                  coin={coin}
+                  onTrade={() => onTradeCoin ? onTradeCoin(coin.base) : onNavigate("trade")}
+                  onFav={toggleFav}
+                  isFav={favorites.has(coin.base)}
+                />
               ))}
             </div>
           </Card>
@@ -136,7 +142,11 @@ export function CustomerDashboard({ onNavigate }: { onNavigate: (s: CustomerSect
             ) : (
               <div className="space-y-2">
                 {favoriteCoins.map((coin) => (
-                  <div key={coin.base} className="flex items-center gap-3 p-2 rounded-lg hover:bg-sidebar-accent/40 cursor-pointer" onClick={() => onNavigate("trade")}>
+                  <div
+                    key={coin.base}
+                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-sidebar-accent/40 cursor-pointer transition-colors"
+                    onClick={() => onTradeCoin ? onTradeCoin(coin.base) : onNavigate("trade")}
+                  >
                     <span className="h-8 w-8 flex items-center justify-center rounded-full text-sm font-bold" style={{ background: `${coin.iconColor}25`, color: coin.iconColor }}>
                       {coin.icon}
                     </span>
@@ -150,6 +160,7 @@ export function CustomerDashboard({ onNavigate }: { onNavigate: (s: CustomerSect
                         {coin.change24h >= 0 ? "+" : ""}{coin.change24h.toFixed(2)}%
                       </p>
                     </div>
+                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
                   </div>
                 ))}
               </div>

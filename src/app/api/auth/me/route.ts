@@ -27,6 +27,7 @@ export async function GET() {
         profilePhoto: user.profilePhoto,
         lastLogin: user.lastLogin,
         lastLoginIp: user.lastLoginIp,
+        mustChangePassword: user.mustChangePassword,
         createdAt: user.createdAt,
       },
       wallet: wallet

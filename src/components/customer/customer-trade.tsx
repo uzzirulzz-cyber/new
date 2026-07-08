@@ -49,9 +49,12 @@ interface SettledTrade {
   settledAt: string;
 }
 
-export function CustomerTrade({ onSettled }: { onSettled: () => void }) {
+export function CustomerTrade({ onSettled, initialCoin }: { onSettled: () => void; initialCoin?: string | null }) {
   const { wallet, refresh } = useAuth();
-  const [selectedCoin, setSelectedCoin] = useState(marketPairs[0]);
+  const initialPair = initialCoin
+    ? marketPairs.find((p) => p.base === initialCoin) || marketPairs[0]
+    : marketPairs[0];
+  const [selectedCoin, setSelectedCoin] = useState(initialPair);
   const [search, setSearch] = useState("");
   const [direction, setDirection] = useState<"UP" | "DOWN">("UP");
   const [duration, setDuration] = useState(DURATIONS[0]);
@@ -60,7 +63,7 @@ export function CustomerTrade({ onSettled }: { onSettled: () => void }) {
   const [activeTrade, setActiveTrade] = useState<ActiveTrade | null>(null);
   const [result, setResult] = useState<SettledTrade | null>(null);
   const [countdown, setCountdown] = useState(0);
-  const [livePrice, setLivePrice] = useState(selectedCoin.lastPrice);
+  const [livePrice, setLivePrice] = useState(initialPair.lastPrice);
   const [tick, setTick] = useState(0);
   const [placing, setPlacing] = useState(false);
 
