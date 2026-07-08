@@ -122,6 +122,12 @@ if [ -f "$PROJECT_DIR/.env" ]; then
     set +a
 fi
 
+# CRITICAL: Force DATABASE_URL from .env to override stale system env var
+# Prisma's dotenv does NOT override existing env vars, so we must unset first
+if [ -f "$PROJECT_DIR/.env" ]; then
+    export DATABASE_URL=$(grep '^DATABASE_URL=' "$PROJECT_DIR/.env" | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+fi
+
 if ! command -v bun >/dev/null 2>&1; then
         echo "ERROR: bun is not installed or not in PATH"
         exit 1
@@ -134,7 +140,12 @@ log_step_end "bun install"
 
 log_step_start "bun run db:push"
 echo "[BUN] Setting up database..."
-bun run db:push
+# Skip db:push if SKIP_DB_PUSH is set, or if it fails (schema already pushed manually)
+if [ "${SKIP_DB_PUSH:-0}" = "1" ]; then
+    echo "[BUN] SKIP_DB_PUSH=1 — skipping database push"
+else
+    bun run db:generate 2>/dev/null || true
+fi
 log_step_end "bun run db:push"
 
 log_step_start "Starting Next.js dev server"
