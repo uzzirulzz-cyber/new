@@ -1,8 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// BlockExchange.buzz — Prisma schema
+// Full production schema for the crypto trading platform.
 
 generator client {
   provider = "prisma-client-js"
@@ -13,20 +10,241 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ─── Users & Auth ──────────────────────────────────────────────
+
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String         @id @default(cuid())
+  uid             String         @unique           // human-readable: BX-XXXXXXXX
+  email           String         @unique
+  passwordHash    String
+  name            String
+  mobile          String?
+  country         String?
+  role            UserRole       @default(USER)
+  status          UserStatus     @default(ACTIVE)
+  kycStatus       KycStatus      @default(UNVERIFIED)
+  invitationCode  String?                          // code they used to register
+  referralCode    String         @unique           // their own code for inviting others
+  referredById    String?                          // User id of referrer (agent or user)
+  profilePhoto    String?
+  lastLogin       DateTime?
+  lastLoginIp     String?
+  lastLoginDevice String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  wallet          Wallet?
+  trades          Trade[]
+  transactions    Transaction[]
+  notifications   Notification[]
+  loginSessions   LoginSession[]
+  auditLogs       AuditLog[]     @relation("AdminAuditLogs")
+  agentProfile    Agent?
+  receivedNotifs  SystemNotification[]
+
+  @@index([email])
+  @@index([uid])
+  @@index([referralCode])
+  @@index([role])
+  @@index([status])
 }
 
-model Post {
+enum UserRole {
+  USER
+  AGENT
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  PENDING
+  SUSPENDED
+  BANNED
+  FROZEN
+}
+
+enum KycStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+// ─── Wallet ────────────────────────────────────────────────────
+
+model Wallet {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  available     Float    @default(0)    // available balance
+  frozen        Float    @default(0)    // frozen in active trades
+  totalProfit   Float    @default(0)    // cumulative realized P&L
+  todayProfit   Float    @default(0)    // profit since midnight
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ─── Trades ────────────────────────────────────────────────────
+
+model Trade {
+  id            String       @id @default(cuid())
+  tradeId       String       @unique           // human-readable: TRD-XXXXXXXX
+  userId        String
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coin          String                          // e.g. "BTC"
+  direction     TradeDirection                  // UP or DOWN
+  amount        Float                           // investment amount
+  duration      Int                             // seconds: 30, 60, 120
+  profitPercent Int                             // 20, 30, 50
+  entryPrice    Float
+  exitPrice     Float?
+  status        TradeStatus   @default(ACTIVE)
+  result        TradeResult?
+  profit        Float        @default(0)
+  createdAt     DateTime     @default(now())
+  settledAt     DateTime?
+
+  @@index([userId])
+  @@index([status])
+  @@index([coin])
+  @@index([createdAt])
+}
+
+enum TradeDirection {
+  UP
+  DOWN
+}
+
+enum TradeStatus {
+  ACTIVE       // in progress, counting down
+  SETTLED      // completed
+  CANCELLED
+}
+
+enum TradeResult {
+  WIN
+  LOSS
+}
+
+// ─── Transactions (deposits, withdrawals, transfers, profits) ──
+
+model Transaction {
+  id          String            @id @default(cuid())
+  txId        String            @unique           // human-readable: TXN-XXXXXXXX
+  userId      String
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        TransactionType
+  amount      Float
+  fee         Float             @default(0)
+  status      TransactionStatus @default(PENDING)
+  method      String?                              // "bank", "card", "crypto", "usdt", etc.
+  reference   String?                              // external tx hash / bank ref
+  destination String?                              // withdraw destination
+  note        String?
+  adminNote   String?
+  createdAt   DateTime          @default(now())
+  processedAt DateTime?
+
+  @@index([userId])
+  @@index([type])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  TRANSFER
+  TRADE_PROFIT
+  TRADE_LOSS
+  TRADE_INVEST
+  TRADE_REFUND
+  ADMIN_CREDIT
+  ADMIN_DEBIT
+  REFERRAL_BONUS
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCESSFUL
+  FAILED
+  HELD
+  CANCELLED
+}
+
+// ─── Notifications ─────────────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String   @default("info")   // info, success, warning, danger
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
+}
+
+model SystemNotification {
   id        String   @id @default(cuid())
   title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
+  message   String
+  type      String   @default("info")   // info, maintenance, alert, promo, security
+  audience  String   @default("all")    // all, users, agents, admins
+  createdBy String?
+  creator   User?    @relation(fields: [createdBy], references: [id])
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+
+  @@index([audience])
+}
+
+// ─── Agent ─────────────────────────────────────────────────────
+
+model Agent {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  commissionRate Float   @default(10)   // percentage
+  totalCommission Float @default(0)
+  totalReferrals  Int    @default(0)
+  activeReferrals Int    @default(0)
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ─── Security & Audit ──────────────────────────────────────────
+
+model LoginSession {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device      String?
+  ip          String?
+  location    String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime?
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  adminId     String
+  admin       User     @relation("AdminAuditLogs", fields: [adminId], references: [id])
+  action      String                            // "ADD_FUNDS", "BAN_USER", "APPROVE_DEPOSIT", etc.
+  targetType  String?                           // "user", "transaction", "trade"
+  targetId    String?
+  details     String?
+  ip          String?
+  createdAt   DateTime @default(now())
+
+  @@index([adminId])
+  @@index([action])
+  @@index([createdAt])
 }

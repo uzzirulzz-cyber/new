@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
+import { AuthProvider } from "@/hooks/use-auth";
 
 const inter = Inter({
   variable: "--font-geist-sans",
@@ -10,7 +11,6 @@ const inter = Inter({
   display: "swap",
 });
 
-// Use a monospace stack for numeric/code areas
 const monoFont = Inter({
   variable: "--font-geist-mono",
   subsets: ["latin"],
@@ -18,19 +18,13 @@ const monoFont = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Brock Exchange — Trade Smarter. Grow Faster.",
-  description: "Brock Exchange — premium crypto trading platform and admin console. Trade smarter, grow faster.",
-  keywords: ["Brock Exchange", "crypto", "exchange", "trading", "bitcoin", "ethereum", "admin"],
-  authors: [{ name: "Brock Exchange" }],
+  title: "BlockExchange.buzz — Trade Smarter. Grow Faster.",
+  description: "BlockExchange.buzz — premium crypto trading platform. Trade smarter, grow faster.",
+  keywords: ["BlockExchange", "crypto", "exchange", "trading", "bitcoin", "ethereum"],
+  authors: [{ name: "BlockExchange.buzz" }],
   icons: {
     icon: "/brock-mark.svg",
     apple: "/brock-logo.png",
-  },
-  openGraph: {
-    title: "Brock Exchange",
-    description: "Trade Smarter. Grow Faster.",
-    siteName: "Brock Exchange",
-    type: "website",
   },
 };
 
@@ -41,12 +35,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${inter.variable} ${monoFont.variable} antialiased`}
-      >
-        {children}
-        <Toaster />
-        <Sonner />
+      <body className={`${inter.variable} ${monoFont.variable} antialiased`}>
+        <AuthProvider>
+          {children}
+          <Toaster />
+          <Sonner />
+        </AuthProvider>
       </body>
     </html>
   );
