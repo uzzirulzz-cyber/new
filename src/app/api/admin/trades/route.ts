@@ -1,15 +1,24 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/api-auth";
+import { requireRole } from "@/lib/api-auth";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const admin = await requireAdmin();
-    if ("error" in admin) return NextResponse.json({ error: admin.error }, { status: admin.status });
+    const admin = await requireRole(req, "SUPER_ADMIN");
+    if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+    const { searchParams } = new URL(req.url);
+    const status = searchParams.get("status");
+    const userId = searchParams.get("userId");
+
+    const where: any = {};
+    if (status) where.status = status;
+    if (userId) where.userId = userId;
 
     const trades = await db.trade.findMany({
+      where,
       orderBy: { createdAt: "desc" },
       take: 100,
       include: {
@@ -18,8 +27,8 @@ export async function GET() {
     });
 
     return NextResponse.json({ trades });
-  } catch (e) {
-    console.error("admin trades error", e);
-    return NextResponse.json({ error: "Failed to load trades" }, { status: 500 });
+  } catch (e: any) {
+    console.error("admin trades error:", e);
+    return NextResponse.json({ error: e.message || "Failed to load trades" }, { status: 500 });
   }
 }
