@@ -8,7 +8,8 @@ export type View =
   | "admin" | "admin-login" | "subagent"
   | "wallet" | "markets" | "watchlist" | "assets"
   | "deposit" | "withdraw" | "history"
-  | "profile" | "notifications" | "settings";
+  | "profile" | "notifications" | "settings"
+  | "support" | "membership";
 
 export type Role = "CUSTOMER" | "SUB_AGENT" | "SUPER_ADMIN";
 
@@ -57,7 +58,7 @@ function gateView(view: View, user: AuthUser | null): View {
   if (view === "admin-login" && user?.role === "SUB_AGENT") return "subagent";
 
   // Customer-only views (require auth)
-  const customerViews: View[] = ["trade", "wallet", "deposit", "withdraw", "history", "profile", "notifications", "settings", "watchlist", "assets"];
+  const customerViews: View[] = ["trade", "wallet", "deposit", "withdraw", "history", "profile", "notifications", "settings", "watchlist", "assets", "support", "membership"];
   if (customerViews.includes(view) && !user) return "login";
   if (customerViews.includes(view) && user && (user.role === "SUPER_ADMIN" || user.role === "SUB_AGENT")) {
     return user.role === "SUPER_ADMIN" ? "admin" : "subagent";

@@ -10,7 +10,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ChevronDown, Bell, Home, BarChart3, Wallet, MoreHorizontal, LogOut, User, Settings, Star, Clock, ArrowDownToLine, ArrowUpFromLine, PieChart } from "lucide-react";
+import { ChevronDown, Bell, Home, BarChart3, Wallet, MoreHorizontal, LogOut, User, Settings, Star, Clock, ArrowDownToLine, ArrowUpFromLine, PieChart, Headset, Crown } from "lucide-react";
 
 const PRIMARY_NAV: { view: View; label: string; icon: any }[] = [
   { view: "home", label: "Home", icon: Home },
@@ -25,6 +25,8 @@ const SECONDARY_NAV: { view: View; label: string; icon: any }[] = [
   { view: "deposit", label: "Deposit", icon: ArrowDownToLine },
   { view: "withdraw", label: "Withdraw", icon: ArrowUpFromLine },
   { view: "history", label: "History", icon: Clock },
+  { view: "membership", label: "Membership", icon: Crown },
+  { view: "support", label: "Support", icon: Headset },
   { view: "profile", label: "Profile", icon: User },
   { view: "notifications", label: "Notifications", icon: Bell },
   { view: "settings", label: "Settings", icon: Settings },

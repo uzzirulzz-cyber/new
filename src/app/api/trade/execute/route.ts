@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser, generateTxId } from "@/lib/api-auth";
 import { db } from "@/lib/db";
 import { COINS, TRADE_OPTIONS, getCoin } from "@/lib/market-data";
+import { getTierByLevel } from "@/lib/membership";
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,6 +35,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Insufficient balance. Available: ${dbUser.balance}` }, { status: 400 });
     }
 
+    // Apply membership tier benefits
+    const tier = getTierByLevel(dbUser.vipLevel);
+    if (investAmount > tier.maxTradeAmount) {
+      return NextResponse.json({ error: `${tier.name} tier max trade: $${tier.maxTradeAmount.toLocaleString()}. Upgrade your membership for higher limits.` }, { status: 400 });
+    }
+
+    // Apply payout bonus from membership tier
+    const effectivePayoutRate = opt.payoutRate + tier.payoutBonus;
+
     // Check for active trades (one at a time)
     const activeTrade = await db.trade.findFirst({ where: { userId: user.id, status: "ACTIVE" } });
     if (activeTrade) {
@@ -58,7 +68,7 @@ export async function POST(req: NextRequest) {
           amount: investAmount,
           duration,
           entryPrice,
-          payoutRate: opt.payoutRate,
+          payoutRate: effectivePayoutRate,
           status: "ACTIVE",
           result: "PENDING",
         },

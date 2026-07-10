@@ -22,11 +22,14 @@ import {
 } from "@/components/brockexchange/extra-views";
 import { PasswordChangeModal } from "@/components/brockexchange/password-change-modal";
 import { SupportChatWidget } from "@/components/brockexchange/support-chat-widget";
+import { SupportView } from "@/components/brockexchange/support-view";
+import { MembershipView } from "@/components/brockexchange/membership-view";
 import { Toaster } from "@/components/ui/sonner";
 
 const CUSTOMER_VIEWS = new Set([
   "trade", "wallet", "markets", "watchlist", "assets",
   "deposit", "withdraw", "history", "profile", "notifications", "settings",
+  "support", "membership",
 ]);
 
 export default function Page() {
@@ -80,6 +83,8 @@ export default function Page() {
       {view === "profile" && <ProfileView />}
       {view === "notifications" && <NotificationsView />}
       {view === "settings" && <SettingsView />}
+      {view === "support" && <SupportView />}
+      {view === "membership" && <MembershipView />}
       <Footer />
       {user?.role === "CUSTOMER" && <SupportChatWidget />}
       {user && <PasswordChangeModal />}
