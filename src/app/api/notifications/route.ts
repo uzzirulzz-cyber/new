@@ -1,41 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
+import { getAuthUser } from "@/lib/api-auth";
 import { db } from "@/lib/db";
 
-// GET /api/notifications — user's notifications + system announcements
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const user = await getCurrentUser();
+    const user = await getAuthUser(req);
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const [userNotifs, systemNotifs] = await Promise.all([
-      db.notification.findMany({
-        where: { userId: user.id },
-        orderBy: { createdAt: "desc" },
-        take: 30,
-      }),
-      db.systemNotification.findMany({
-        where: {
-          OR: [
-            { audience: "all" },
-            { audience: user.role === "ADMIN" || user.role === "SUPER_ADMIN" ? "admins" : "users" },
-          ],
-        },
-        orderBy: { createdAt: "desc" },
-        take: 10,
-      }),
-    ]);
+    const notifications = await db.notification.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+    });
 
-    return NextResponse.json({ notifications: userNotifs, system: systemNotifs });
+    return NextResponse.json({ notifications });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
 
-// PATCH /api/notifications — mark as read
 export async function PATCH(req: NextRequest) {
   try {
-    const user = await getCurrentUser();
+    const user = await getAuthUser(req);
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { id, markAll } = await req.json();
@@ -45,18 +31,14 @@ export async function PATCH(req: NextRequest) {
         where: { userId: user.id, read: false },
         data: { read: true },
       });
-      return NextResponse.json({ success: true, markedAll: true });
-    }
-
-    if (id) {
+    } else if (id) {
       await db.notification.update({
         where: { id, userId: user.id },
         data: { read: true },
       });
-      return NextResponse.json({ success: true });
     }
 
-    return NextResponse.json({ error: "id or markAll required" }, { status: 400 });
+    return NextResponse.json({ success: true });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }

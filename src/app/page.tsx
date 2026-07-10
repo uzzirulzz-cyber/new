@@ -1,46 +1,89 @@
 "use client";
 
-import { useAuth } from "@/hooks/use-auth";
-import { Loader2 } from "lucide-react";
-import { AuthScreen } from "@/components/auth/auth-screen";
-import { ForcePasswordChange } from "@/components/auth/force-password-change";
-import { CustomerShell } from "@/components/customer/customer-shell";
-import { AgentShell } from "@/components/agent/agent-shell";
-import { AdminShell } from "@/components/admin/admin-shell";
+import { useAuth } from "@/lib/auth-store";
+import { Navbar } from "@/components/brockexchange/navbar";
+import { Footer } from "@/components/brockexchange/footer";
+import { HomeView } from "@/components/brockexchange/home-view";
+import { AuthView } from "@/components/brockexchange/auth-view";
+import { TradeView } from "@/components/brockexchange/trade-view";
+import { AdminView } from "@/components/brockexchange/admin-view";
+import { AdminLoginView } from "@/components/brockexchange/admin-login-view";
+import { SubAgentDashboard } from "@/components/brockexchange/subagent-dashboard";
+import {
+  MarketsView,
+  WatchlistView,
+  AssetsView,
+  DepositView,
+  WithdrawView,
+  HistoryView,
+  ProfileView,
+  NotificationsView,
+  SettingsView,
+} from "@/components/brockexchange/extra-views";
+import { PasswordChangeModal } from "@/components/brockexchange/password-change-modal";
+import { SupportChatWidget } from "@/components/brockexchange/support-chat-widget";
+import { Toaster } from "@/components/ui/sonner";
 
-export default function Home() {
-  const { user, loading } = useAuth();
+const CUSTOMER_VIEWS = new Set([
+  "trade", "wallet", "markets", "watchlist", "assets",
+  "deposit", "withdraw", "history", "profile", "notifications", "settings",
+]);
 
-  if (loading) {
+export default function Page() {
+  const { user, view } = useAuth();
+
+  // Standalone: Admin login portal
+  if (view === "admin-login") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#030712] to-[#0f172a]">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-amber-500 mx-auto" />
-          <p className="mt-3 text-sm text-muted-foreground">Loading BlockExchange.buzz...</p>
-        </div>
-      </div>
+      <>
+        <AdminLoginView />
+        <Toaster richColors theme="dark" position="top-center" />
+      </>
     );
   }
 
-  // Not authenticated → show login/register
-  if (!user) {
-    return <AuthScreen />;
+  // Standalone: Admin panel (super admin only)
+  if (view === "admin" && user?.role === "SUPER_ADMIN") {
+    return (
+      <>
+        <AdminView />
+        <PasswordChangeModal />
+        <Toaster richColors theme="dark" position="top-right" />
+      </>
+    );
   }
 
-  // Force password change on first login (e.g. sub-agents with default password)
-  if (user.mustChangePassword) {
-    return <ForcePasswordChange />;
+  // Standalone: Sub-agent dashboard
+  if (view === "subagent" && user?.role === "SUB_AGENT") {
+    return (
+      <>
+        <SubAgentDashboard />
+        <PasswordChangeModal />
+        <Toaster richColors theme="dark" position="top-right" />
+      </>
+    );
   }
 
-  // Route by role
-  if (user.role === "ADMIN" || user.role === "SUPER_ADMIN") {
-    return <AdminShell />;
-  }
-
-  if (user.role === "AGENT") {
-    return <AgentShell />;
-  }
-
-  // Regular customer
-  return <CustomerShell />;
+  // Public + customer views (Navbar + Footer)
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Navbar />
+      {view === "home" && <HomeView />}
+      {(view === "login" || view === "register") && <AuthView />}
+      {view === "trade" && <TradeView />}
+      {view === "markets" && <MarketsView />}
+      {view === "watchlist" && <WatchlistView />}
+      {view === "assets" && <AssetsView />}
+      {view === "deposit" && <DepositView />}
+      {view === "withdraw" && <WithdrawView />}
+      {view === "history" && <HistoryView />}
+      {view === "profile" && <ProfileView />}
+      {view === "notifications" && <NotificationsView />}
+      {view === "settings" && <SettingsView />}
+      <Footer />
+      {user?.role === "CUSTOMER" && <SupportChatWidget />}
+      {user && <PasswordChangeModal />}
+      <Toaster richColors theme="dark" position="top-right" />
+    </div>
+  );
 }

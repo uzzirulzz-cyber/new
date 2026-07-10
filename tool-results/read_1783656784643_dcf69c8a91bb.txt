@@ -1,0 +1,737 @@
+     1→"use client";
+     2→
+     3→import { useEffect, useMemo, useRef, useState } from "react";
+     4→import { motion, AnimatePresence } from "framer-motion";
+     5→import {
+     6→  Area,
+     7→  CartesianGrid,
+     8→  ComposedChart,
+     9→  Line,
+    10→  ReferenceLine,
+    11→  ResponsiveContainer,
+    12→  XAxis,
+    13→  YAxis,
+    14→  Bar,
+    15→  Tooltip,
+    16→} from "recharts";
+    17→import {
+    18→  ArrowDown,
+    19→  ArrowUp,
+    20→  Clock,
+    21→  Lock,
+    22→  TrendingUp,
+    23→  X,
+    24→  CheckCircle2,
+    25→  XCircle,
+    26→  Loader2,
+    27→  History,
+    28→} from "lucide-react";
+    29→import {
+    30→  COINS,
+    31→  DURATIONS,
+    32→  QUICK_AMOUNTS,
+    33→  computePattern,
+    34→  formatPrice,
+    35→  getInitialCandles,
+    36→  nextCandle,
+    37→  tickCandle,
+    38→  type Candle,
+    39→  type Coin,
+    40→} from "@/lib/market-data";
+    41→import { useAuth, apiFetch, type AuthUser } from "@/lib/auth-store";
+    42→import { Button } from "@/components/ui/button";
+    43→import { Input } from "@/components/ui/input";
+    44→import { toast } from "sonner";
+    45→
+    46→type ChartRow = {
+    47→  time: number;
+    48→  open: number;
+    49→  high: number;
+    50→  low: number;
+    51→  close: number;
+    52→  volume: number;
+    53→  upper: number | null;
+    54→  middle: number | null;
+    55→  lower: number | null;
+    56→  ma: number | null;
+    57→};
+    58→
+    59→type ActiveTrade = {
+    60→  id: string;
+    61→  tradeId: string;
+    62→  symbol: string;
+    63→  direction: "UP" | "DOWN";
+    64→  amount: number;
+    65→  duration: number;
+    66→  entryPrice: number;
+    67→  payoutRate: number;
+    68→  remaining: number;
+    69→};
+    70→
+    71→type TradeHistory = {
+    72→  id: string;
+    73→  tradeId: string;
+    74→  symbol: string;
+    75→  direction: "UP" | "DOWN";
+    76→  amount: number;
+    77→  duration: number;
+    78→  entryPrice: number;
+    79→  exitPrice: number | null;
+    80→  result: "PENDING" | "WIN" | "LOSE";
+    81→  profit: number;
+    82→  status: "ACTIVE" | "SETTLED";
+    83→  createdAt: string;
+    84→  settledAt: string | null;
+    85→};
+    86→
+    87→type SettledResult = {
+    88→  tradeId: string;
+    89→  result: "WIN" | "LOSE";
+    90→  profit: number;
+    91→  amount: number;
+    92→  symbol: string;
+    93→  direction: "UP" | "DOWN";
+    94→  entryPrice: number;
+    95→  exitPrice: number;
+    96→};
+    97→
+    98→function makeCandlestickShape(yMin: number, yMax: number) {
+    99→  return function CandlestickShape(props: any) {
+   100→    const { payload, background } = props || {};
+   101→    if (!payload || !background) return null;
+   102→    const { open, high, low, close } = payload;
+   103→    const plotTop: number = background.y;
+   104→    const plotH: number = background.height;
+   105→    const yFor = (v: number) => plotTop + ((yMax - v) / (yMax - yMin || 1)) * plotH;
+   106→    const x: number = background.x + background.width / 2;
+   107→    const w = Math.max(2, background.width * 0.6);
+   108→    const up = close >= open;
+   109→    const color = up ? "#00c853" : "#ff3b30";
+   110→    const yHigh = yFor(high);
+   111→    const yLow = yFor(low);
+   112→    const yOpen = yFor(open);
+   113→    const yClose = yFor(close);
+   114→    const bodyTop = Math.min(yOpen, yClose);
+   115→    const bodyH = Math.max(1, Math.abs(yClose - yOpen));
+   116→    return (
+   117→      <g>
+   118→        <line x1={x} y1={yHigh} x2={x} y2={yLow} stroke={color} strokeWidth={1} />
+   119→        <rect x={x - w / 2} y={bodyTop} width={w} height={bodyH} fill={color} rx={1} />
+   120→      </g>
+   121→    );
+   122→  };
+   123→}
+   124→
+   125→function ChartTooltip({ active, payload }: any) {
+   126→  if (!active || !payload || !payload.length) return null;
+   127→  const d = payload[0]?.payload as ChartRow;
+   128→  if (!d) return null;
+   129→  return (
+   130→    <div className="bx-glass rounded-md px-3 py-2 text-xs">
+   131→      <div className="text-muted-foreground mb-1">{new Date(d.time).toLocaleTimeString()}</div>
+   132→      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+   133→        <span className="text-muted-foreground">O:</span><span className="text-white">{formatPrice(d.open)}</span>
+   134→        <span className="text-muted-foreground">H:</span><span className="text-[#00c853]">{formatPrice(d.high)}</span>
+   135→        <span className="text-muted-foreground">L:</span><span className="text-[#ff3b30]">{formatPrice(d.low)}</span>
+   136→        <span className="text-muted-foreground">C:</span><span className="text-white">{formatPrice(d.close)}</span>
+   137→      </div>
+   138→    </div>
+   139→  );
+   140→}
+   141→
+   142→export function TradeView() {
+   143→  const { user, setUser } = useAuth();
+   144→  const [coin, setCoin] = useState<Coin>(COINS[0]);
+   145→  const [candles, setCandles] = useState<Candle[]>(() => getInitialCandles(COINS[0].symbol, 60));
+   146→  const [amount, setAmount] = useState<number>(50);
+   147→  const [duration, setDuration] = useState<number>(60);
+   148→  const [direction, setDirection] = useState<"UP" | "DOWN" | null>(null);
+   149→  const [activeTrade, setActiveTrade] = useState<ActiveTrade | null>(null);
+   150→  const [history, setHistory] = useState<TradeHistory[]>([]);
+   151→  const [resultModal, setResultModal] = useState<SettledResult | null>(null);
+   152→  const [placing, setPlacing] = useState(false);
+   153→  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+   154→  const nextRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+   155→  const settleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+   156→  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+   157→
+   158→  // Switch coin → reset candles
+   159→  useEffect(() => {
+   160→    setCandles(getInitialCandles(coin.symbol, 60));
+   161→  }, [coin]);
+   162→
+   163→  // Live tick — nudge last candle every 2s
+   164→  useEffect(() => {
+   165→    if (tickRef.current) clearInterval(tickRef.current);
+   166→    tickRef.current = setInterval(() => {
+   167→      setCandles((prev) => {
+   168→        const last = prev[prev.length - 1];
+   169→        const ticked = tickCandle(last, coin.symbol);
+   170→        return [...prev.slice(0, -1), ticked];
+   171→      });
+   172→    }, 2000);
+   173→    return () => {
+   174→      if (tickRef.current) clearInterval(tickRef.current);
+   175→    };
+   176→  }, [coin]);
+   177→
+   178→  // Push new candle every 60s
+   179→  useEffect(() => {
+   180→    if (nextRef.current) clearTimeout(nextRef.current);
+   181→    nextRef.current = setTimeout(function push() {
+   182→      setCandles((prev) => {
+   183→        const last = prev[prev.length - 1];
+   184→        const nc = nextCandle(last.close, coin.symbol);
+   185→        return [...prev.slice(1), nc];
+   186→      });
+   187→      nextRef.current = setTimeout(push, 60000);
+   188→    }, 60000);
+   189→    return () => {
+   190→      if (nextRef.current) clearTimeout(nextRef.current);
+   191→    };
+   192→  }, [coin]);
+   193→
+   194→  // Load history for authed users
+   195→  useEffect(() => {
+   196→    if (!user) {
+   197→      setHistory([]);
+   198→      return;
+   199→    }
+   200→    let cancelled = false;
+   201→    (async () => {
+   202→      try {
+   203→        const res = await apiFetch("/api/trade/history");
+   204→        const data = await res.json();
+   205→        if (!cancelled && data.trades) setHistory(data.trades);
+   206→      } catch {}
+   207→    })();
+   208→    return () => {
+   209→      cancelled = true;
+   210→    };
+   211→  }, [user]);
+   212→
+   213→  const pattern = useMemo(() => computePattern(candles), [candles]);
+   214→
+   215→  const chartData: ChartRow[] = useMemo(() => {
+   216→    return candles.map((c, i) => {
+   217→      const b = pattern.bollinger[i];
+   218→      const ma = pattern.ma[i];
+   219→      return {
+   220→        time: c.time,
+   221→        open: c.open,
+   222→        high: c.high,
+   223→        low: c.low,
+   224→        close: c.close,
+   225→        volume: c.volume,
+   226→        upper: b && !isNaN(b.upper) ? b.upper : null,
+   227→        middle: b && !isNaN(b.middle) ? b.middle : null,
+   228→        lower: b && !isNaN(b.lower) ? b.lower : null,
+   229→        ma: ma && !isNaN(ma) ? ma : null,
+   230→      };
+   231→    });
+   232→  }, [candles, pattern]);
+   233→
+   234→  const lastCandle = candles[candles.length - 1];
+   235→  const firstCandle = candles[0];
+   236→  const currentPrice = lastCandle.close;
+   237→  const dayChange = ((lastCandle.close - firstCandle.open) / firstCandle.open) * 100;
+   238→  const dayHigh = Math.max(...candles.map((c) => c.high));
+   239→  const dayLow = Math.min(...candles.map((c) => c.low));
+   240→
+   241→  const yMin = Math.min(...candles.map((c) => c.low)) * 0.999;
+   242→  const yMax = Math.max(...candles.map((c) => c.high)) * 1.001;
+   243→
+   244→  const payoutRate = DURATIONS.find((d) => d.seconds === duration)?.payoutRate ?? 0.2;
+   245→  const potentialProfit = amount * payoutRate;
+   246→  const totalReturn = amount + potentialProfit;
+   247→
+   248→  const placeTrade = async () => {
+   249→    if (!user) {
+   250→      toast.error("Please login to trade.");
+   251→      return;
+   252→    }
+   253→    if (!direction) {
+   254→      toast.error("Choose UP or DOWN.");
+   255→      return;
+   256→    }
+   257→    if (!amount || amount <= 0) {
+   258→      toast.error("Enter a valid amount.");
+   259→      return;
+   260→    }
+   261→    if (amount > user.balance) {
+   262→      toast.error("Insufficient balance.");
+   263→      return;
+   264→    }
+   265→    setPlacing(true);
+   266→    try {
+   267→      const res = await apiFetch("/api/trade/execute", {
+   268→        method: "POST",
+   269→        body: JSON.stringify({ symbol: coin.symbol, direction, amount, duration }),
+   270→      });
+   271→      const data = await res.json();
+   272→      if (!res.ok) {
+   273→        toast.error(data.error || "Trade failed.");
+   274→        return;
+   275→      }
+   276→      setUser(data.user as AuthUser);
+   277→      const t = data.trade;
+   278→      const at: ActiveTrade = {
+   279→        id: t.id,
+   280→        tradeId: t.tradeId,
+   281→        symbol: t.symbol,
+   282→        direction: t.direction,
+   283→        amount: t.amount,
+   284→        duration: t.duration,
+   285→        entryPrice: t.entryPrice,
+   286→        payoutRate: t.payoutRate,
+   287→        remaining: t.duration,
+   288→      };
+   289→      setActiveTrade(at);
+   290→      toast.success(`Trade placed — settles in ${t.duration}s`);
+   291→      setDirection(null);
+   292→
+   293→      // Countdown
+   294→      countdownRef.current = setInterval(() => {
+   295→        setActiveTrade((prev) => (prev ? { ...prev, remaining: Math.max(0, prev.remaining - 1) } : prev));
+   296→      }, 1000);
+   297→
+   298→      // Settle after duration
+   299→      settleRef.current = setTimeout(async () => {
+   300→        try {
+   301→          if (countdownRef.current) clearInterval(countdownRef.current);
+   302→          const sres = await apiFetch("/api/trade/settle", {
+   303→            method: "POST",
+   304→            body: JSON.stringify({ tradeId: t.tradeId }),
+   305→          });
+   306→          const sdata = await sres.json();
+   307→          if (sres.ok) {
+   308→            setUser(sdata.user as AuthUser);
+   309→            setResultModal({
+   310→              tradeId: sdata.trade.tradeId,
+   311→              result: sdata.trade.result,
+   312→              profit: sdata.trade.profit,
+   313→              amount: sdata.trade.amount,
+   314→              symbol: sdata.trade.symbol,
+   315→              direction: sdata.trade.direction,
+   316→              entryPrice: sdata.trade.entryPrice,
+   317→              exitPrice: sdata.trade.exitPrice,
+   318→            });
+   319→            // Refetch history
+   320→            try {
+   321→              const hres = await apiFetch("/api/trade/history");
+   322→              const hdata = await hres.json();
+   323→              if (hdata.trades) setHistory(hdata.trades);
+   324→            } catch {}
+   325→          }
+   326→        } catch (e) {
+   327→          console.error(e);
+   328→        } finally {
+   329→          setActiveTrade(null);
+   330→        }
+   331→      }, t.duration * 1000);
+   332→    } catch (e) {
+   333→      console.error(e);
+   334→      toast.error("Network error.");
+   335→    } finally {
+   336→      setPlacing(false);
+   337→    }
+   338→  };
+   339→
+   340→  useEffect(() => {
+   341→    return () => {
+   342→      if (countdownRef.current) clearInterval(countdownRef.current);
+   343→      if (settleRef.current) clearTimeout(settleRef.current);
+   344→    };
+   345→  }, []);
+   346→
+   347→  const authed = !!user;
+   348→
+   349→  return (
+   350→    <main className="flex-1 pt-20 pb-10 bx-fade-in">
+   351→      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+   352→        <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6">
+   353→          {/* Chart card */}
+   354→          <div className="bx-glass rounded-2xl p-5">
+   355→            {/* Coin selector */}
+   356→            <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+   357→              <div className="flex items-center gap-2 overflow-x-auto bx-scroll max-w-full pb-1">
+   358→                {COINS.map((c) => {
+   359→                  const active = c.symbol === coin.symbol;
+   360→                  return (
+   361→                    <button
+   362→                      key={c.symbol}
+   363→                      onClick={() => setCoin(c)}
+   364→                      className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition ${
+   365→                        active ? "bx-blue-gradient text-white bx-glow" : "border border-white/10 text-muted-foreground hover:text-white hover:bg-white/5"
+   366→                      }`}
+   367→                    >
+   368→                      <span style={{ color: c.color }}>{c.icon}</span>
+   369→                      {c.symbol}
+   370→                    </button>
+   371→                  );
+   372→                })}
+   373→              </div>
+   374→              <div className="inline-flex items-center gap-1.5 text-xs text-[#00c853]">
+   375→                <span className="h-1.5 w-1.5 rounded-full bg-[#00c853] bx-pulse-dot" /> LIVE
+   376→              </div>
+   377→            </div>
+   378→
+   379→            {/* Price + change */}
+   380→            <div className="flex items-end justify-between mb-3">
+   381→              <div>
+   382→                <div className="text-2xl font-bold text-white">{formatPrice(currentPrice)}</div>
+   383→                <div className="text-xs text-muted-foreground">{coin.name}/USDT</div>
+   384→              </div>
+   385→              <div className="flex items-center gap-4 text-xs">
+   386→                <div>
+   387→                  <div className="text-muted-foreground">24h HIGH</div>
+   388→                  <div className="text-white font-semibold">{formatPrice(dayHigh)}</div>
+   389→                </div>
+   390→                <div>
+   391→                  <div className="text-muted-foreground">24h LOW</div>
+   392→                  <div className="text-white font-semibold">{formatPrice(dayLow)}</div>
+   393→                </div>
+   394→                <div>
+   395→                  <div className="text-muted-foreground">CHANGE</div>
+   396→                  <div className={`font-semibold ${dayChange >= 0 ? "text-[#00c853]" : "text-[#ff3b30]"}`}>
+   397→                    {dayChange >= 0 ? "+" : ""}{dayChange.toFixed(2)}%
+   398→                  </div>
+   399→                </div>
+   400→              </div>
+   401→            </div>
+   402→
+   403→            {/* Chart */}
+   404→            <div className="relative h-[440px]">
+   405→              {/* Base layer — candlesticks */}
+   406→              <ResponsiveContainer width="100%" height="100%">
+   407→                <ComposedChart data={chartData} margin={{ top: 10, right: 8, bottom: 0, left: 0 }}>
+   408→                  <CartesianGrid stroke="rgba(255,255,255,0.04)" strokeDasharray="3 3" />
+   409→                  <XAxis
+   410→                    dataKey="time"
+   411→                    tickFormatter={(t) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+   412→                    tick={{ fill: "#64748b", fontSize: 10 }}
+   413→                    interval={Math.floor(chartData.length / 6)}
+   414→                    axisLine={false}
+   415→                    tickLine={false}
+   416→                  />
+   417→                  <YAxis
+   418→                    domain={[yMin, yMax]}
+   419→                    tickFormatter={(v) => formatPrice(v)}
+   420→                    tick={{ fill: "#64748b", fontSize: 10 }}
+   421→                    orientation="right"
+   422→                    width={70}
+   423→                    axisLine={false}
+   424→                    tickLine={false}
+   425→                  />
+   426→                  <Tooltip content={<ChartTooltip />} />
+   427→                  <Bar dataKey="high" shape={makeCandlestickShape(yMin, yMax) as any} isAnimationActive={false} />
+   428→                </ComposedChart>
+   429→              </ResponsiveContainer>
+   430→
+   431→              {/* Overlay layer — patterns (blurred if not authed) */}
+   432→              <div className={`absolute inset-0 pointer-events-none ${!authed ? "blur-[10px] opacity-40" : ""}`}>
+   433→                <ResponsiveContainer width="100%" height="100%">
+   434→                  <ComposedChart data={chartData} margin={{ top: 10, right: 8, bottom: 0, left: 0 }}>
+   435→                    <YAxis domain={[yMin, yMax]} orientation="right" width={70} hide />
+   436→                    <XAxis dataKey="time" hide />
+   437→                    <Area dataKey="lower" stroke="none" fill="#2196f3" fillOpacity={0.05} isAnimationActive={false} />
+   438→                    <Line dataKey="upper" stroke="#2196f3" strokeWidth={1} strokeDasharray="3 3" dot={false} isAnimationActive={false} />
+   439→                    <Line dataKey="lower" stroke="#2196f3" strokeWidth={1} strokeDasharray="3 3" dot={false} isAnimationActive={false} />
+   440→                    <Line dataKey="middle" stroke="#42a5f5" strokeWidth={1} strokeDasharray="1 2" dot={false} isAnimationActive={false} />
+   441→                    <Line dataKey="ma" stroke="#f5a623" strokeWidth={1.2} dot={false} isAnimationActive={false} />
+   442→                    <ReferenceLine y={pattern.resistance} stroke="#ff3b30" strokeDasharray="4 4" strokeWidth={1} />
+   443→                    <ReferenceLine y={pattern.support} stroke="#00c853" strokeDasharray="4 4" strokeWidth={1} />
+   444→                  </ComposedChart>
+   445→                </ResponsiveContainer>
+   446→              </div>
+   447→
+   448→              {/* Lock overlay for guests */}
+   449→              {!authed && (
+   450→                <div className="absolute inset-0 z-30 flex items-center justify-center bg-gradient-to-b from-[#02060f]/55 via-[#02060f]/70 to-[#02060f]/85 rounded-lg">
+   451→                  <div className="bx-glass rounded-2xl p-6 text-center max-w-xs">
+   452→                    <div className="h-14 w-14 rounded-full bx-blue-gradient bx-glow flex items-center justify-center mx-auto mb-3">
+   453→                      <Lock className="h-7 w-7 text-white" />
+   454→                    </div>
+   455→                    <h3 className="text-lg font-bold text-white">Trading Pattern Locked</h3>
+   456→                    <p className="mt-1.5 text-xs text-muted-foreground">
+   457→                      Login to reveal Bollinger Bands, Moving Averages, and Support/Resistance levels.
+   458→                    </p>
+   459→                    <Button
+   460→                      size="sm"
+   461→                      onClick={() => useAuth.getState().navigate("login")}
+   462→                      className="mt-3 bx-blue-gradient bx-glow text-white border-0"
+   463→                    >
+   464→                      Login Now
+   465→                    </Button>
+   466→                  </div>
+   467→                </div>
+   468→              )}
+   469→            </div>
+   470→
+   471→            {/* Legend */}
+   472→            <div className="flex items-center gap-4 flex-wrap mt-3 text-[10px] text-muted-foreground">
+   473→              <span className="inline-flex items-center gap-1"><span className="h-0.5 w-3 bg-[#2196f3]" /> Bollinger</span>
+   474→              <span className="inline-flex items-center gap-1"><span className="h-0.5 w-3 bg-[#f5a623]" /> MA</span>
+   475→              <span className="inline-flex items-center gap-1"><span className="h-0.5 w-3 bg-[#ff3b30]" /> Resistance</span>
+   476→              <span className="inline-flex items-center gap-1"><span className="h-0.5 w-3 bg-[#00c853]" /> Support</span>
+   477→              {!authed && (
+   478→                <span className="ml-auto text-[#42a5f5]">Pattern locked — login to reveal</span>
+   479→              )}
+   480→            </div>
+   481→          </div>
+   482→
+   483→          {/* Trade panel */}
+   484→          <div className="space-y-4">
+   485→            <div className="bx-glass rounded-2xl p-5">
+   486→              <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+   487→                <TrendingUp className="h-4 w-4 text-[#2196f3]" /> Place a trade
+   488→              </h2>
+   489→
+   490→              {/* Active trade banner */}
+   491→              {activeTrade && (
+   492→                <div className="bx-glass-soft rounded-lg p-3 mb-4">
+   493→                  <div className="flex items-center justify-between text-xs">
+   494→                    <span className="inline-flex items-center gap-1.5">
+   495→                      <Clock className="h-3.5 w-3.5 text-[#42a5f5]" />
+   496→                      <span className="font-semibold text-white">Trade active</span>
+   497→                    </span>
+   498→                    <span className="text-[#42a5f5] font-bold">{activeTrade.remaining}s</span>
+   499→                  </div>
+   500→                  <div className="mt-2 h-1.5 bg-white/5 rounded-full overflow-hidden">
+   501→                    <motion.div
+   502→                      className={`h-full ${activeTrade.direction === "UP" ? "bg-[#00c853]" : "bg-[#ff3b30]"}`}
+   503→                      initial={{ width: "100%" }}
+   504→                      animate={{ width: `${(activeTrade.remaining / activeTrade.duration) * 100}%` }}
+   505→                      transition={{ ease: "linear", duration: 1 }}
+   506→                    />
+   507→                  </div>
+   508→                  <div className="mt-2 flex items-center justify-between text-[10px] text-muted-foreground">
+   509→                    <span>{activeTrade.symbol} • {activeTrade.direction} • {activeTrade.amount} USDT</span>
+   510→                    <span>@ {formatPrice(activeTrade.entryPrice)}</span>
+   511→                  </div>
+   512→                </div>
+   513→              )}
+   514→
+   515→              {/* Direction */}
+   516→              <div className="grid grid-cols-2 gap-2 mb-4">
+   517→                <button
+   518→                  onClick={() => !activeTrade && setDirection("UP")}
+   519→                  disabled={!!activeTrade}
+   520→                  className={`h-14 rounded-lg flex flex-col items-center justify-center gap-0.5 transition border ${
+   521→                    direction === "UP"
+   522→                      ? "bg-gradient-to-b from-[#00c853] to-[#009624] text-white border-transparent bx-glow"
+   523→                      : "border-[#00c853]/30 text-[#00c853] hover:bg-[#00c853]/10"
+   524→                  } ${activeTrade ? "opacity-50 cursor-not-allowed" : ""}`}
+   525→                >
+   526→                  <ArrowUp className="h-5 w-5" />
+   527→                  <span className="text-xs font-bold">BUY UP</span>
+   528→                </button>
+   529→                <button
+   530→                  onClick={() => !activeTrade && setDirection("DOWN")}
+   531→                  disabled={!!activeTrade}
+   532→                  className={`h-14 rounded-lg flex flex-col items-center justify-center gap-0.5 transition border ${
+   533→                    direction === "DOWN"
+   534→                      ? "bg-gradient-to-b from-[#ff3b30] to-[#b32020] text-white border-transparent bx-glow"
+   535→                      : "border-[#ff3b30]/30 text-[#ff3b30] hover:bg-[#ff3b30]/10"
+   536→                  } ${activeTrade ? "opacity-50 cursor-not-allowed" : ""}`}
+   537→                >
+   538→                  <ArrowDown className="h-5 w-5" />
+   539→                  <span className="text-xs font-bold">BUY DOWN</span>
+   540→                </button>
+   541→              </div>
+   542→
+   543→              {/* Duration */}
+   544→              <div className="mb-4">
+   545→                <div className="text-xs text-muted-foreground mb-2">Duration</div>
+   546→                <div className="grid grid-cols-3 gap-2">
+   547→                  {DURATIONS.map((d) => (
+   548→                    <button
+   549→                      key={d.seconds}
+   550→                      onClick={() => !activeTrade && setDuration(d.seconds)}
+   551→                      disabled={!!activeTrade}
+   552→                      className={`h-12 rounded-lg text-xs font-semibold transition border ${
+   553→                        duration === d.seconds
+   554→                          ? "bx-blue-gradient text-white border-transparent bx-glow"
+   555→                          : "border-white/10 text-muted-foreground hover:text-white hover:bg-white/5"
+   556→                      } ${activeTrade ? "opacity-50 cursor-not-allowed" : ""}`}
+   557→                    >
+   558→                      <div>{d.label}</div>
+   559→                      <div className="text-[9px] opacity-80">+{(d.payoutRate * 100).toFixed(0)}%</div>
+   560→                    </button>
+   561→                  ))}
+   562→                </div>
+   563→              </div>
+   564→
+   565→              {/* Amount */}
+   566→              <div className="mb-4">
+   567→                <div className="flex items-center justify-between text-xs mb-2">
+   568→                  <span className="text-muted-foreground">Amount (USDT)</span>
+   569→                  <span className="text-muted-foreground">Bal: {user ? user.balance.toFixed(2) : "—"}</span>
+   570→                </div>
+   571→                <Input
+   572→                  type="number"
+   573→                  min={1}
+   574→                  value={amount}
+   575→                  onChange={(e) => setAmount(Math.max(0, Number(e.target.value)))}
+   576→                  disabled={!authed || !!activeTrade}
+   577→                  className="bg-white/5 border-white/10 h-10"
+   578→                />
+   579→                <div className="grid grid-cols-6 gap-1.5 mt-2">
+   580→                  {QUICK_AMOUNTS.map((a) => (
+   581→                    <button
+   582→                      key={a}
+   583→                      onClick={() => !activeTrade && setAmount(a)}
+   584→                      disabled={!authed || !!activeTrade}
+   585→                      className={`h-7 rounded text-[10px] font-medium border transition ${
+   586→                        amount === a
+   587→                          ? "border-[#2196f3] text-white bg-[#2196f3]/15"
+   588→                          : "border-white/10 text-muted-foreground hover:text-white hover:bg-white/5"
+   589→                      } ${!authed || activeTrade ? "opacity-50 cursor-not-allowed" : ""}`}
+   590→                    >
+   591→                      {a}
+   592→                    </button>
+   593→                  ))}
+   594→                </div>
+   595→              </div>
+   596→
+   597→              {/* Payout preview */}
+   598→              <div className="bx-glass-soft rounded-lg p-3 mb-4 space-y-1 text-xs">
+   599→                <div className="flex justify-between">
+   600→                  <span className="text-muted-foreground">Potential profit</span>
+   601→                  <span className="text-[#00c853] font-bold">+{potentialProfit.toFixed(2)} USDT</span>
+   602→                </div>
+   603→                <div className="flex justify-between">
+   604→                  <span className="text-muted-foreground">Total return on win</span>
+   605→                  <span className="text-white font-semibold">{totalReturn.toFixed(2)} USDT</span>
+   606→                </div>
+   607→                <div className="flex justify-between">
+   608→                  <span className="text-muted-foreground">Payout rate</span>
+   609→                  <span className="text-white">{(payoutRate * 100).toFixed(0)}%</span>
+   610→                </div>
+   611→              </div>
+   612→
+   613→              <Button
+   614→                onClick={placeTrade}
+   615→                disabled={placing || !!activeTrade || !authed}
+   616→                className="w-full bx-blue-gradient bx-glow text-white border-0 h-11"
+   617→              >
+   618→                {!authed ? (
+   619→                  <span className="inline-flex items-center gap-2"><Lock className="h-4 w-4" /> Login to trade</span>
+   620→                ) : placing ? (
+   621→                  <span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Placing...</span>
+   622→                ) : activeTrade ? (
+   623→                  <span>Trade active — {activeTrade.remaining}s</span>
+   624→                ) : direction ? (
+   625→                  `Buy ${direction} ${coin.symbol}`
+   626→                ) : (
+   627→                  "Select direction"
+   628→                )}
+   629→              </Button>
+   630→            </div>
+   631→
+   632→            {/* Recent trades */}
+   633→            <div className="bx-glass rounded-2xl p-5">
+   634→              <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+   635→                <History className="h-4 w-4 text-[#2196f3]" /> Recent trades
+   636→              </h3>
+   637→              {!authed ? (
+   638→                <div className="text-center py-8 text-xs text-muted-foreground">
+   639→                  Login to view your trade history.
+   640→                </div>
+   641→              ) : history.length === 0 ? (
+   642→                <div className="text-center py-8 text-xs text-muted-foreground">
+   643→                  No trades yet. Place your first trade above.
+   644→                </div>
+   645→              ) : (
+   646→                <div className="max-h-64 overflow-y-auto bx-scroll space-y-1.5">
+   647→                  {history.slice(0, 10).map((t) => {
+   648→                    const Icon = t.direction === "UP" ? ArrowUp : ArrowDown;
+   649→                    const color = t.direction === "UP" ? "text-[#00c853]" : "text-[#ff3b30]";
+   650→                    return (
+   651→                      <div key={t.id} className="flex items-center justify-between text-xs border border-white/5 rounded-md px-2.5 py-2 hover:bg-white/5">
+   652→                        <div className="flex items-center gap-2">
+   653→                          <Icon className={`h-3.5 w-3.5 ${color}`} />
+   654→                          <div>
+   655→                            <div className="text-white font-medium">{t.symbol} • {t.duration}s</div>
+   656→                            <div className="text-[10px] text-muted-foreground">
+   657→                              {new Date(t.createdAt).toLocaleTimeString()} • {t.amount} USDT
+   658→                            </div>
+   659→                          </div>
+   660→                        </div>
+   661→                        {t.result === "PENDING" ? (
+   662→                          <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/15 text-amber-400">PENDING</span>
+   663→                        ) : t.result === "WIN" ? (
+   664→                          <span className="text-[10px] px-2 py-0.5 rounded bg-[#00c853]/15 text-[#00c853]">+{t.profit.toFixed(2)}</span>
+   665→                        ) : (
+   666→                          <span className="text-[10px] px-2 py-0.5 rounded bg-[#ff3b30]/15 text-[#ff3b30]">{t.profit.toFixed(2)}</span>
+   667→                        )}
+   668→                      </div>
+   669→                    );
+   670→                  })}
+   671→                </div>
+   672→              )}
+   673→            </div>
+   674→          </div>
+   675→        </div>
+   676→      </div>
+   677→
+   678→      {/* Result modal */}
+   679→      <AnimatePresence>
+   680→        {resultModal && (
+   681→          <motion.div
+   682→            initial={{ opacity: 0 }}
+   683→            animate={{ opacity: 1 }}
+   684→            exit={{ opacity: 0 }}
+   685→            className="fixed inset-0 z-50 flex items-center justify-center bg-[#02060f]/80 backdrop-blur-sm p-4"
+   686→            onClick={() => setResultModal(null)}
+   687→          >
+   688→            <motion.div
+   689→              initial={{ scale: 0.9, y: 20 }}
+   690→              animate={{ scale: 1, y: 0 }}
+   691→              exit={{ scale: 0.9, y: 20 }}
+   692→              onClick={(e) => e.stopPropagation()}
+   693→              className="bx-glass rounded-2xl p-8 max-w-sm w-full text-center bx-glow"
+   694→            >
+   695→              <button onClick={() => setResultModal(null)} className="absolute top-3 right-3 text-muted-foreground hover:text-white">
+   696→                <X className="h-4 w-4" />
+   697→              </button>
+   698→              {resultModal.result === "WIN" ? (
+   699→                <>
+   700→                  <div className="h-20 w-20 rounded-full bg-[#00c853]/15 flex items-center justify-center mx-auto mb-4">
+   701→                    <CheckCircle2 className="h-10 w-10 text-[#00c853]" />
+   702→                  </div>
+   703→                  <h3 className="text-2xl font-bold text-[#00c853]">You Won!</h3>
+   704→                  <p className="text-sm text-muted-foreground mt-1">{resultModal.symbol} • {resultModal.direction}</p>
+   705→                  <div className="bx-glass-soft rounded-lg p-4 mt-4 space-y-2 text-sm">
+   706→                    <div className="flex justify-between"><span className="text-muted-foreground">Entry</span><span className="text-white">{formatPrice(resultModal.entryPrice)}</span></div>
+   707→                    <div className="flex justify-between"><span className="text-muted-foreground">Exit</span><span className="text-white">{formatPrice(resultModal.exitPrice)}</span></div>
+   708→                    <div className="flex justify-between"><span className="text-muted-foreground">Profit</span><span className="text-[#00c853] font-bold">+{resultModal.profit.toFixed(2)} USDT</span></div>
+   709→                  </div>
+   710→                </>
+   711→              ) : (
+   712→                <>
+   713→                  <div className="h-20 w-20 rounded-full bg-[#ff3b30]/15 flex items-center justify-center mx-auto mb-4">
+   714→                    <XCircle className="h-10 w-10 text-[#ff3b30]" />
+   715→                  </div>
+   716→                  <h3 className="text-2xl font-bold text-[#ff3b30]">You Lost</h3>
+   717→                  <p className="text-sm text-muted-foreground mt-1">{resultModal.symbol} • {resultModal.direction}</p>
+   718→                  <div className="bx-glass-soft rounded-lg p-4 mt-4 space-y-2 text-sm">
+   719→                    <div className="flex justify-between"><span className="text-muted-foreground">Entry</span><span className="text-white">{formatPrice(resultModal.entryPrice)}</span></div>
+   720→                    <div className="flex justify-between"><span className="text-muted-foreground">Exit</span><span className="text-white">{formatPrice(resultModal.exitPrice)}</span></div>
+   721→                    <div className="flex justify-between"><span className="text-muted-foreground">Loss</span><span className="text-[#ff3b30] font-bold">{resultModal.profit.toFixed(2)} USDT</span></div>
+   722→                  </div>
+   723→                </>
+   724→              )}
+   725→              <Button onClick={() => setResultModal(null)} className="mt-5 w-full bx-blue-gradient bx-glow text-white border-0">
+   726→                Trade again
+   727→              </Button>
+   728→            </motion.div>
+   729→          </motion.div>
+   730→        )}
+   731→      </AnimatePresence>
+   732→    </main>
+   733→  );
+   734→}
+   735→
+   736→export default TradeView;
+   737→

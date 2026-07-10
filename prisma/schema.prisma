@@ -1,5 +1,5 @@
-// BlockExchange.buzz — Prisma schema
-// Full production schema for the crypto trading platform.
+// Brock Exchange — Prisma schema
+// Crypto trading platform with RBAC (CUSTOMER / SUB_AGENT / SUPER_ADMIN)
 
 generator client {
   provider = "prisma-client-js"
@@ -10,59 +10,54 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ─── Users & Auth ──────────────────────────────────────────────
-
 model User {
-  id              String         @id @default(cuid())
-  uid             String         @unique           // human-readable: BX-XXXXXXXX
-  email           String         @unique
-  passwordHash    String
-  name            String
-  mobile          String?
-  country         String?
-  role            UserRole       @default(USER)
-  status          UserStatus     @default(ACTIVE)
-  kycStatus       KycStatus      @default(UNVERIFIED)
-  invitationCode  String?                          // code they used to register
-  referralCode    String         @unique           // their own code for inviting others
-  referredById    String?                          // User id of referrer (agent or user)
-  profilePhoto    String?
-  lastLogin       DateTime?
-  lastLoginIp     String?
-  lastLoginDevice String?
-  mustChangePassword Boolean    @default(false)   // force password change on first login
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id                   String       @id @default(cuid())
+  uid                  String       @unique
+  email                String       @unique
+  passwordHash         String
+  name                 String
+  phone                String?
+  country              String?
+  role                 UserRole     @default(CUSTOMER)
+  status               UserStatus   @default(ACTIVE)
+  kycStatus            KycStatus    @default(UNVERIFIED)
+  balance              Float        @default(0)
+  vipLevel             Int          @default(1)
+  invitationCode       String?                        // code used by customer to register
+  referralCode         String       @unique           // sub-agent's own code
+  linkedSubAgentId     String?                        // sub-agent who invited this customer
+  mustChangePassword   Boolean      @default(false)
+  registeredAt         DateTime     @default(now())
+  lastLoginAt          DateTime?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
 
-  wallet          Wallet?
-  trades          Trade[]
-  transactions    Transaction[]
-  notifications   Notification[]
-  loginSessions   LoginSession[]
-  auditLogs       AuditLog[]     @relation("AdminAuditLogs")
-  agentProfile    Agent?
-  receivedNotifs  SystemNotification[]
+  trades               Trade[]
+  transactions         Transaction[]
+  notifications        Notification[]
+  loginLogs            LoginLog[]
+  actionsPerformed     ActionLog[]  @relation("AdminActions")
+  agentProfile         Agent?
+  conversationsStarted Conversation[] @relation("CustomerConvs")
+  messages             Message[]
 
   @@index([email])
   @@index([uid])
-  @@index([referralCode])
   @@index([role])
-  @@index([status])
+  @@index([referralCode])
+  @@index([linkedSubAgentId])
 }
 
 enum UserRole {
-  USER
-  AGENT
-  ADMIN
+  CUSTOMER
+  SUB_AGENT
   SUPER_ADMIN
 }
 
 enum UserStatus {
   ACTIVE
-  PENDING
-  SUSPENDED
-  BANNED
   FROZEN
+  BANNED
 }
 
 enum KycStatus {
@@ -72,43 +67,26 @@ enum KycStatus {
   REJECTED
 }
 
-// ─── Wallet ────────────────────────────────────────────────────
-
-model Wallet {
-  id            String   @id @default(cuid())
-  userId        String   @unique
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  available     Float    @default(0)    // available balance
-  frozen        Float    @default(0)    // frozen in active trades
-  totalProfit   Float    @default(0)    // cumulative realized P&L
-  todayProfit   Float    @default(0)    // profit since midnight
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-}
-
-// ─── Trades ────────────────────────────────────────────────────
-
 model Trade {
-  id            String       @id @default(cuid())
-  tradeId       String       @unique           // human-readable: TRD-XXXXXXXX
-  userId        String
-  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  coin          String                          // e.g. "BTC"
-  direction     TradeDirection                  // UP or DOWN
-  amount        Float                           // investment amount
-  duration      Int                             // seconds: 30, 60, 120
-  profitPercent Int                             // 20, 30, 50
-  entryPrice    Float
-  exitPrice     Float?
-  status        TradeStatus   @default(ACTIVE)
-  result        TradeResult?
-  profit        Float        @default(0)
-  createdAt     DateTime     @default(now())
-  settledAt     DateTime?
+  id           String       @id @default(cuid())
+  tradeId      String       @unique
+  userId       String
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbol       String
+  direction    TradeDirection
+  amount       Float
+  duration     Int                            // 30, 60, or 120 seconds
+  entryPrice   Float
+  exitPrice    Float?
+  result       TradeResult   @default(PENDING)
+  payoutRate   Float                            // 0.20, 0.30, or 0.50
+  profit       Float        @default(0)
+  status       TradeStatus  @default(ACTIVE)
+  createdAt    DateTime     @default(now())
+  settledAt    DateTime?
 
   @@index([userId])
   @@index([status])
-  @@index([coin])
   @@index([createdAt])
 }
 
@@ -117,135 +95,125 @@ enum TradeDirection {
   DOWN
 }
 
-enum TradeStatus {
-  ACTIVE       // in progress, counting down
-  SETTLED      // completed
-  CANCELLED
-}
-
 enum TradeResult {
+  PENDING
   WIN
-  LOSS
+  LOSE
 }
 
-// ─── Transactions (deposits, withdrawals, transfers, profits) ──
+enum TradeStatus {
+  ACTIVE
+  SETTLED
+}
 
 model Transaction {
-  id          String            @id @default(cuid())
-  txId        String            @unique           // human-readable: TXN-XXXXXXXX
+  id          String              @id @default(cuid())
+  txId        String              @unique
   userId      String
-  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   type        TransactionType
   amount      Float
-  fee         Float             @default(0)
-  status      TransactionStatus @default(PENDING)
-  method      String?                              // "bank", "card", "crypto", "usdt", etc.
-  reference   String?                              // external tx hash / bank ref
-  destination String?                              // withdraw destination
-  note        String?
-  adminNote   String?
-  createdAt   DateTime          @default(now())
+  status      TransactionStatus   @default(PENDING)
+  method      String?
+  reference   String?
+  createdAt   DateTime            @default(now())
   processedAt DateTime?
 
   @@index([userId])
   @@index([type])
   @@index([status])
-  @@index([createdAt])
 }
 
 enum TransactionType {
   DEPOSIT
   WITHDRAWAL
-  TRANSFER
   TRADE_PROFIT
-  TRADE_LOSS
-  TRADE_INVEST
-  TRADE_REFUND
-  ADMIN_CREDIT
-  ADMIN_DEBIT
-  REFERRAL_BONUS
+  TRADE_LOSE
 }
 
 enum TransactionStatus {
   PENDING
-  SUCCESSFUL
-  FAILED
-  HELD
-  CANCELLED
+  APPROVED
+  REJECTED
 }
-
-// ─── Notifications ─────────────────────────────────────────────
 
 model Notification {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   title     String
-  message   String
-  type      String   @default("info")   // info, success, warning, danger
+  body      String
+  type      String   @default("info")
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
 
   @@index([userId, read])
 }
 
-model SystemNotification {
+model LoginLog {
   id        String   @id @default(cuid())
-  title     String
-  message   String
-  type      String   @default("info")   // info, maintenance, alert, promo, security
-  audience  String   @default("all")    // all, users, agents, admins
-  createdBy String?
-  creator   User?    @relation(fields: [createdBy], references: [id])
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  email     String
+  ip        String?
+  userAgent String?
+  success   Boolean
+  reason    String?
   createdAt DateTime @default(now())
-
-  @@index([audience])
-}
-
-// ─── Agent ─────────────────────────────────────────────────────
-
-model Agent {
-  id            String   @id @default(cuid())
-  userId        String   @unique
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  commissionRate Float   @default(10)   // percentage
-  totalCommission Float @default(0)
-  totalReferrals  Int    @default(0)
-  activeReferrals Int    @default(0)
-  createdAt     DateTime @default(now())
-
-  @@index([userId])
-}
-
-// ─── Security & Audit ──────────────────────────────────────────
-
-model LoginSession {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  device      String?
-  ip          String?
-  location    String?
-  userAgent   String?
-  createdAt   DateTime @default(now())
-  expiresAt   DateTime?
 
   @@index([userId])
   @@index([createdAt])
 }
 
-model AuditLog {
+model ActionLog {
   id          String   @id @default(cuid())
   adminId     String
-  admin       User     @relation("AdminAuditLogs", fields: [adminId], references: [id])
-  action      String                            // "ADD_FUNDS", "BAN_USER", "APPROVE_DEPOSIT", etc.
-  targetType  String?                           // "user", "transaction", "trade"
+  admin       User     @relation("AdminActions", fields: [adminId], references: [id])
+  action      String
+  targetType  String?
   targetId    String?
   details     String?
   ip          String?
   createdAt   DateTime @default(now())
 
   @@index([adminId])
-  @@index([action])
   @@index([createdAt])
+}
+
+model Agent {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  commissionRate   Float    @default(10)
+  totalCommission  Float    @default(0)
+  totalReferrals   Int      @default(0)
+  createdAt        DateTime @default(now())
+}
+
+model Conversation {
+  id           String   @id @default(cuid())
+  customerId   String
+  customer     User     @relation("CustomerConvs", fields: [customerId], references: [id], onDelete: Cascade)
+  subAgentId   String?
+  subject      String   @default("Support Chat")
+  status       String   @default("open")
+  createdAt    DateTime @default(now())
+
+  messages     Message[]
+
+  @@index([customerId])
+  @@index([subAgentId])
+}
+
+model Message {
+  id              String   @id @default(cuid())
+  conversationId  String
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId        String
+  sender          User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  body            String
+  createdAt       DateTime @default(now())
+
+  @@index([conversationId])
+  @@index([senderId])
 }
