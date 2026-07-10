@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
         country: country || null,
         role: "CUSTOMER",
         status: "ACTIVE",
-        balance: 10000, // demo balance
+        balance: 0,
         vipLevel: 1,
         invitationCode: invitationCode.toUpperCase(),
         referralCode: uid,
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
       data: {
         userId: user.id,
         title: "Welcome to NexTradePro!",
-        body: `Your account has been created. UID: ${uid}. You received 10,000 USDT demo balance to start trading.`,
+        body: `Your account has been created. UID: ${uid}. Deposit funds to start trading.`,
         type: "success",
       },
     });
